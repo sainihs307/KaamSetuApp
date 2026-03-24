@@ -3,11 +3,22 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+<<<<<<< HEAD
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+=======
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
+>>>>>>> c27e72e71a1575bbe9e1b07f76a35f11049780ea
 } from "react-native";
 
 export default function Register() {
@@ -86,7 +97,7 @@ export default function Register() {
         return;
       }
 
-      const res = await fetch("http://172.23.36.127:8000/api/auth/send-otp", {
+      const res = await fetch("http://172.27.16.252:8000/api/auth/send-otp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -129,7 +140,7 @@ export default function Register() {
         return;
       }
 
-      const res = await fetch("http://172.23.36.127:8000/api/auth/register", {
+      const res = await fetch("http://172.27.16.252:8000/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,172 +173,184 @@ export default function Register() {
   };
 
   return (
-    <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={styles.container}>
-      <Text style={styles.logo}>KaamSetu</Text>
-      <Text style={styles.subtitle}>Connecting Workers with Opportunities</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.title}>Create Your Account</Text>
-
-        {/* Name */}
-        <Input
-          icon="person-outline"
-          placeholder="Full Name"
-          value={name}
-          onChange={setName}
-        />
-
-        {/* Email + OTP */}
-        <View style={styles.row}>
-          <View style={{ flex: 1 }}>
-            <Input
-              icon="mail-outline"
-              placeholder="Email"
-              value={email}
-              onChange={setEmail}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.otpBtn}
-            onPress={handleSendOTP}
-            disabled={timer > 0}
-          >
-            <Text style={{ fontSize: 12 }}>
-              {timer > 0 ? `Wait ${timer}s` : "Verify OTP"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* resend OTP */}
-        {timer > 0 ? (
-          <Text style={{ textAlign: "center", marginTop: 5 }}>
-            Resend OTP in {timer}s
+    <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.logo}>KaamSetu</Text>
+          <Text style={styles.subtitle}>
+            Connecting Workers with Opportunities
           </Text>
-        ) : (
-          <TouchableOpacity onPress={handleSendOTP}>
-            <Text
-              style={{ textAlign: "center", color: "#4a6cf7", marginTop: 5 }}
-            >
-              Resend OTP
-            </Text>
-          </TouchableOpacity>
-        )}
 
-        {/* OTP */}
-        <Text style={styles.label}>Enter OTP</Text>
+          <View style={styles.card}>
+            <Text style={styles.title}>Create Your Account</Text>
 
-        <View style={styles.otpContainer}>
-          {otp.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={(ref) => {
-                inputs.current[index] = ref;
-              }}
-              style={styles.otpBox}
-              keyboardType="numeric"
-              maxLength={1}
-              value={digit}
-              onChangeText={(value) => handleChange(value, index)}
-              onKeyPress={({ nativeEvent }) =>
-                handleKeyPress(nativeEvent.key, index)
-              }
+            {/* Name */}
+            <Input
+              icon="person-outline"
+              placeholder="Full Name"
+              value={name}
+              onChange={setName}
             />
-          ))}
-        </View>
 
-        {/* Password */}
-        <PasswordInput
-          value={password}
-          onChange={setPassword}
-          show={showPassword}
-          toggle={() => setShowPassword(!showPassword)}
-          placeholder="Set Password"
-        />
+            {/* Email + OTP */}
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Input
+                  icon="mail-outline"
+                  placeholder="Email"
+                  value={email}
+                  onChange={setEmail}
+                />
+              </View>
 
-        {/* Confirm */}
-        <PasswordInput
-          value={confirm}
-          onChange={setConfirm}
-          show={showConfirm}
-          toggle={() => setShowConfirm(!showConfirm)}
-          placeholder="Confirm Password"
-        />
-
-        {/* Address */}
-        <Input
-          icon="location-outline"
-          placeholder="Address (Optional)"
-          value={address}
-          onChange={setAddress}
-        />
-
-        {/* 🔥 MULTI TAG INPUT */}
-        <Text style={styles.label}>Worker Tags</Text>
-
-        {/* Default suggestions always visible */}
-        <View style={styles.tagContainer}>
-          {suggestions.map((item) => (
-            <TouchableOpacity
-              key={item}
-              style={[
-                styles.tag,
-                selectedTags.includes(item) && { backgroundColor: "#4a6cf7" },
-              ]}
-              onPress={() => addTag(item)}
-            >
-              <Text style={{ color: "#fff" }}>{item}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Selected tags */}
-        <View style={styles.tagContainer}>
-          {selectedTags.map((tag) => (
-            <View key={tag} style={styles.tag}>
-              <Text style={{ color: "#fff" }}>{tag}</Text>
-              <Text style={styles.remove} onPress={() => removeTag(tag)}>
-                {" "}
-                ✕{" "}
-              </Text>
+              <TouchableOpacity style={styles.otpBtn} onPress={handleSendOTP}>
+                <Text style={{ fontSize: 12 }}>Verify OTP</Text>
+              </TouchableOpacity>
             </View>
-          ))}
-        </View>
 
-        {/* Custom input */}
-        <View style={styles.inputContainer}>
-          <Ionicons name="pricetag-outline" size={20} />
-          <TextInput
-            placeholder="Add your own skill"
-            style={styles.input}
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={() => addTag(tagInput)}
-          />
-        </View>
+            {/* resend OTP */}
+            {timer > 0 ? (
+              <Text style={{ textAlign: "center", marginTop: 5 }}>
+                Resend OTP in {timer}s
+              </Text>
+            ) : (
+              <TouchableOpacity onPress={handleSendOTP}>
+                <Text
+                  style={{
+                    textAlign: "center",
+                    color: "#4a6cf7",
+                    marginTop: 5,
+                  }}
+                >
+                  Resend OTP
+                </Text>
+              </TouchableOpacity>
+            )}
 
-        {/* Phone */}
-        <Input
-          icon="call-outline"
-          placeholder="Phone Number"
-          value={phone}
-          onChange={setPhone}
-        />
+            {/* OTP */}
+            <Text style={styles.label}>Enter OTP</Text>
 
-        {/* Error */}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+            <View style={styles.otpContainer}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={(ref) => {
+                    inputs.current[index] = ref;
+                  }}
+                  style={styles.otpBox}
+                  keyboardType="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChangeText={(value) => handleChange(value, index)}
+                  onKeyPress={({ nativeEvent }) =>
+                    handleKeyPress(nativeEvent.key, index)
+                  }
+                />
+              ))}
+            </View>
 
-        {/* Register */}
-        <TouchableOpacity onPress={handleRegister}>
-          <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={styles.button}>
-            <Text style={styles.buttonText}>Register</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            {/* Password */}
+            <PasswordInput
+              value={password}
+              onChange={setPassword}
+              show={showPassword}
+              toggle={() => setShowPassword(!showPassword)}
+              placeholder="Set Password"
+            />
 
-        <Text style={styles.footer}>
-          By registering, you agree to Terms & Privacy Policy
-        </Text>
-      </View>
+            {/* Confirm */}
+            <PasswordInput
+              value={confirm}
+              onChange={setConfirm}
+              show={showConfirm}
+              toggle={() => setShowConfirm(!showConfirm)}
+              placeholder="Confirm Password"
+            />
+
+            {/* Address */}
+            <Input
+              icon="location-outline"
+              placeholder="Address (Optional)"
+              value={address}
+              onChange={setAddress}
+            />
+
+            {/* Tags */}
+            <Text style={styles.label}>Worker Tags</Text>
+
+            <View style={styles.tagContainer}>
+              {suggestions.map((item) => (
+                <TouchableOpacity
+                  key={item}
+                  style={[
+                    styles.tag,
+                    selectedTags.includes(item) && {
+                      backgroundColor: "#4a6cf7",
+                    },
+                  ]}
+                  onPress={() => addTag(item)}
+                >
+                  <Text style={{ color: "#fff" }}>{item}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.tagContainer}>
+              {selectedTags.map((tag) => (
+                <View key={tag} style={styles.tag}>
+                  <Text style={{ color: "#fff" }}>{tag}</Text>
+                  <Text style={styles.remove} onPress={() => removeTag(tag)}>
+                    {" "}
+                    ✕{" "}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Ionicons name="pricetag-outline" size={20} />
+              <TextInput
+                placeholder="Add your own skill"
+                style={styles.input}
+                value={tagInput}
+                onChangeText={setTagInput}
+                onSubmitEditing={() => addTag(tagInput)}
+              />
+            </View>
+
+            {/* Phone */}
+            <Input
+              icon="call-outline"
+              placeholder="Phone Number"
+              value={phone}
+              onChange={setPhone}
+            />
+
+            {/* Error */}
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {/* Register */}
+            <TouchableOpacity onPress={handleRegister}>
+              <LinearGradient
+                colors={["#6c4ef6", "#4a6cf7"]}
+                style={styles.button}
+              >
+                <Text style={styles.buttonText}>Register</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <Text style={styles.footer}>
+              By registering, you agree to Terms & Privacy Policy
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }
@@ -367,7 +390,11 @@ const PasswordInput = ({ value, onChange, show, toggle, placeholder }: any) => (
 /* 🎨 Styles */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20 },
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    justifyContent: "center",
+  },
 
   logo: {
     fontSize: 34,
