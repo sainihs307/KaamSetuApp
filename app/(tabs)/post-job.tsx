@@ -14,10 +14,7 @@ import {
   View,
 } from "react-native";
 
-import {
-  KColors as Colors,
-  Spacing
-} from "../../constants/kaamsetuTheme";
+import { KColors as Colors, Spacing } from "../../constants/kaamsetuTheme";
 
 export default function PostJob() {
   const [category, setCategory] = useState("");
