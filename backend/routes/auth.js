@@ -6,18 +6,17 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-let otpStore = {}; // temp store
+let otpStore = {};
 
+// ================= SEND OTP =================
 router.post("/send-otp", async (req, res) => {
   const { email } = req.body;
 
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
-
   otpStore[email] = otp;
 
-  console.log("OTP:", otp); // 🔥 debug
+  console.log("OTP:", otp);
 
-  // ✉️ email setup
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -41,26 +40,22 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, phone, password, address, skills, otp } = req.body;
 
-    // 🔥 1. check existing user
     const existingUser = await User.findOne({
       $or: [{ email }, { phone }],
     });
 
     if (existingUser) {
       return res.status(400).json({
-        message: "User already registered. Please login.",
+        message: "User already exists",
       });
     }
 
-    // 🔥 2. verify OTP
     if (otpStore[email] !== otp) {
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    // 🔥 3. hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 🔥 4. save user
     const newUser = new User({
       name,
       email,
@@ -79,6 +74,7 @@ router.post("/register", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 // ================= LOGIN =================
 router.post("/login", async (req, res) => {
   try {
@@ -99,6 +95,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
+
     const { password: _, ...userData } = user._doc;
 
     res.json({
@@ -116,7 +113,6 @@ router.post("/reset-password", async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
-    // 🔥 OTP check
     if (otpStore[email] !== otp) {
       return res.status(400).json({ message: "Invalid OTP" });
     }
@@ -132,7 +128,7 @@ router.post("/reset-password", async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
-    delete otpStore[email]; // 🔥 clear OTP
+    delete otpStore[email];
 
     res.json({ message: "Password updated successfully" });
   } catch (err) {
