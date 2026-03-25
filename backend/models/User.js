@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema(
     password: String,
     address: String,
     skills: [String],
+    profileImage: { type: String, default: "profile.jpg" },
   },
   { timestamps: true },
 );

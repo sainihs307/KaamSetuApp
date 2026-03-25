@@ -49,7 +49,7 @@ export default function HomeScreen() {
     try {
       setError("");
 
-      const res = await fetch("http://172.23.36.127:8000/api/auth/login", {
+      const res = await fetch("http://172.24.197.206:8000/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

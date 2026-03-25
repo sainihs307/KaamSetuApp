@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import { useCallback } from "react";import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -17,17 +17,37 @@ import {
   Spacing,
 } from "../../constants/kaamsetuTheme";
 import { completedJobHistory, myRequests } from "../../constants/mockData";
+import { Image } from "react-native";
+
 
 // ─── Reusable Components ────────────────────────────────────────────────────
 
-function Avatar({ name, size = 72 }: { name: string; size?: number }) {
+function Avatar({
+  name,
+  profileImage,
+  size = 72,
+}: {
+  name: string;
+  profileImage?: string;
+  size?: number;
+}) {
   const initials = name
     .split(" ")
     .map((n) => n[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  return (
+
+  return profileImage ? (
+    <Image
+      source={{ uri: profileImage }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+      }}
+    />
+  ) : (
     <View
       style={[
         styles.avatar,
@@ -107,6 +127,8 @@ type UserType = {
   address?: string;
   skills?: string[];
   rating?: number;
+    profileImage?: string; // 🔥 ADD THIS
+
 };
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -124,17 +146,18 @@ export default function AccountScreen() {
       console.log("Logout error:", err);
     }
   };
-  useEffect(() => {
+ // ✅ REPLACE WITH THIS
+useFocusEffect(
+  useCallback(() => {
     const loadUser = async () => {
       const storedUser = await AsyncStorage.getItem("user");
-
       if (storedUser) {
         setUser(JSON.parse(storedUser));
       }
     };
-
     loadUser();
-  }, []);
+  }, [])
+);
   // if (!user) return null;
   return (
     <SafeAreaView style={styles.safe}>
@@ -153,8 +176,12 @@ export default function AccountScreen() {
         {/* ── Profile Card ── */}
         <View style={styles.profileCard}>
           <View style={styles.profileTop}>
-            <Avatar name={user?.name || "User"} size={72} />
-            <View style={styles.profileInfo}>
+<Avatar
+  name={user?.name || "User"}
+  profileImage={user?.profileImage}
+  size={72}
+/>            
+<View style={styles.profileInfo}>
               <View style={styles.profileNameRow}>
                 <Text style={styles.profileName}>{user?.name || "Loading..."}</Text>
                 <TouchableOpacity

@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -15,12 +16,14 @@ import {
 } from "react-native";
 import {
     KColors as Colors,
-    Radius,
-    Shadow,
-    Spacing,
+    Radius
 } from "../constants/kaamsetuTheme";
-import { currentUser } from "../constants/mockData";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import * as ImagePicker from "expo-image-picker";
+
+// Avatar Component
 function Avatar({ name, size = 80 }: { name: string; size?: number }) {
   const initials = name
     .split(" ")
@@ -28,6 +31,7 @@ function Avatar({ name, size = 80 }: { name: string; size?: number }) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
   return (
     <View
       style={[
@@ -38,13 +42,11 @@ function Avatar({ name, size = 80 }: { name: string; size?: number }) {
       <Text style={[styles.avatarText, { fontSize: size * 0.35 }]}>
         {initials}
       </Text>
-      <View style={styles.avatarEditBadge}>
-        <Text style={{ fontSize: 10 }}>✏️</Text>
-      </View>
     </View>
   );
 }
 
+// Input Component
 function InputField({
   label,
   value,
@@ -79,22 +81,112 @@ function InputField({
   );
 }
 
+// MAIN SCREEN
 export default function UpdateProfileScreen() {
   const router = useRouter();
 
-  const [name, setName] = useState(currentUser.name);
-  const [email, setEmail] = useState(currentUser.email);
-  const [phone, setPhone] = useState(currentUser.phone);
-  const [address, setAddress] = useState(currentUser.address);
-  const [workerTags, setWorkerTags] = useState(
-    currentUser.workerTags.join(", "),
-  );
+  const [user, setUser] = useState<any>(null);
 
-  const handleSave = () => {
-    // In real app, would call API here
-    Alert.alert("Success", "Profile updated successfully!", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [workerTags, setWorkerTags] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  // 🔥 Load user from AsyncStorage
+  useEffect(() => {
+    const loadUser = async () => {
+      const storedUser = await AsyncStorage.getItem("user");
+
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+
+        setUser(parsed);
+        setName(parsed.name || "");
+        setEmail(parsed.email || "");
+        setPhone(parsed.phone || "");
+        setAddress(parsed.address || "");
+        setWorkerTags(parsed.skills || "");
+        setProfileImage(parsed.profileImage || null);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  // 🔥 Save changes
+  const handleSave = async () => {
+    try {
+      console.log("CLICKED"); // debug
+      console.log("IMAGE:", image);
+
+      const storedUser = await AsyncStorage.getItem("user");
+      const parsedUser = JSON.parse(storedUser!);
+
+      // 🔥 CREATE FORMDATA
+      const formData = new FormData();
+
+      formData.append("id", parsedUser._id);
+      formData.append("name", name);
+      formData.append("email", email);
+      formData.append("phone", phone);
+      formData.append("address", address);
+      formData.append("skills", workerTags);
+
+      // 🔥 ADD IMAGE
+      if (image) {
+        const filename = image.split("/").pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : `image`;
+
+        formData.append("profileImage", {
+          uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+          name: filename,
+          type: type,
+        } as any);
+      }
+
+      // 🔥 CALL BACKEND
+      const res = await fetch(
+        "http://172.24.197.206 :8000/api/auth/update-profile",
+        {
+          method: "PUT",
+          body: formData, // ❗ no headers
+        },
+      );
+
+      const data = await res.json();
+
+      console.log("RESPONSE:", data);
+
+      if (!res.ok) {
+        Alert.alert("Error", data.message);
+        return;
+      }
+
+      // ✅ update local storage
+      await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+      Alert.alert("Success", "Profile updated!", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Error", "Server error");
+    }
   };
 
   return (
@@ -103,7 +195,7 @@ export default function UpdateProfileScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Update Profile</Text>
@@ -114,179 +206,138 @@ export default function UpdateProfileScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Avatar */}
           <View style={styles.avatarSection}>
-            <Avatar name={name} size={90} />
-            <TouchableOpacity style={styles.changePhotoBtn}>
-              <Text style={styles.changePhotoText}>Change Photo</Text>
+            {image ? (
+              // newly picked image
+              <Image
+                source={{ uri: image }}
+                style={{ width: 90, height: 90, borderRadius: 45 }}
+              />
+            ) : profileImage ? (
+              // existing image from database
+              <Image
+                source={{ uri: profileImage }}
+                style={{ width: 90, height: 90, borderRadius: 45 }}
+              />
+            ) : (
+              // no image at all - show initials
+              <Avatar name={name} size={90} />
+            )}
+
+            {/* 👇 ADD THIS BELOW IMAGE */}
+            <TouchableOpacity style={styles.changePhotoBtn} onPress={pickImage}>
+              <Text>Change Photo</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Form Card */}
+          {/* Form */}
           <View style={styles.formCard}>
-            <InputField
-              label="Full Name"
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your full name"
-            />
-            <InputField
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              keyboardType="email-address"
-            />
-            <InputField
-              label="Phone"
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="+91 XXXXXXXXXX"
-              keyboardType="phone-pad"
-            />
+            <InputField label="Full Name" value={name} onChangeText={setName} />
+            <InputField label="Email" value={email} onChangeText={setEmail} />
+            <InputField label="Phone" value={phone} onChangeText={setPhone} />
             <InputField
               label="Address"
               value={address}
               onChangeText={setAddress}
-              placeholder="Enter your address"
             />
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>
-                Worker Tags (comma separated)
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={workerTags}
-                onChangeText={setWorkerTags}
-                placeholder="Plumber, Cook, etc."
-                placeholderTextColor={Colors.textMuted}
-              />
-              <Text style={styles.tagHint}>
-                Adding worker tags makes you eligible to apply for jobs.
-              </Text>
-            </View>
+            <InputField
+              label="Worker Tags"
+              value={workerTags}
+              onChangeText={setWorkerTags}
+              placeholder="Plumber, Cook..."
+            />
           </View>
 
+          {/* Save Button */}
           <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
             <Text style={styles.saveBtnText}>Save Changes</Text>
           </TouchableOpacity>
-
-          <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// STYLES
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+
   header: {
     backgroundColor: Colors.primary,
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
+    padding: 15,
   },
-  backBtn: { width: 36, height: 36, justifyContent: "center" },
-  backText: {
-    color: Colors.white,
-    fontSize: 28,
-    fontWeight: "300",
-    lineHeight: 32,
-  },
+
   headerTitle: {
-    color: Colors.white,
+    color: "#fff",
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "bold",
   },
-  scroll: { flex: 1 },
-  scrollContent: { padding: Spacing.md },
+
+  backText: {
+    color: "#fff",
+    fontSize: 24,
+  },
+
+  scrollContent: {
+    padding: 20,
+  },
 
   avatarSection: {
     alignItems: "center",
-    paddingVertical: Spacing.xl,
-    gap: 12,
+    marginBottom: 20,
   },
+
   avatar: {
     backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarText: { color: Colors.white, fontWeight: "700" },
-  avatarEditBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: Colors.white,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: Colors.primary,
+
+  avatarText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
+
+  formCard: {
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 10,
+    gap: 10,
+  },
+
+  inputGroup: { gap: 5 },
+
+  inputLabel: { fontWeight: "600" },
+
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    padding: 10,
+    borderRadius: 8,
+  },
+
+  saveBtn: {
+    backgroundColor: Colors.primary,
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+    alignItems: "center",
+  },
+
+  saveBtnText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
   changePhotoBtn: {
     backgroundColor: Colors.primaryPale,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: Radius.full,
-  },
-  changePhotoText: {
-    color: Colors.primary,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-
-  formCard: {
-    backgroundColor: Colors.cardBg,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    ...Shadow.sm,
-    gap: 16,
-    marginBottom: 20,
-  },
-  inputGroup: { gap: 6 },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: Colors.textSecondary,
-  },
-  input: {
-    borderWidth: 1.5,
-    borderColor: Colors.cardBorder,
-    borderRadius: Radius.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    backgroundColor: Colors.offWhite,
-  },
-  tagHint: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    fontStyle: "italic",
-  },
-
-  saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.full,
-    paddingVertical: 14,
-    alignItems: "center",
-    ...Shadow.md,
-  },
-  saveBtnText: {
-    color: Colors.white,
-    fontWeight: "700",
-    fontSize: 16,
   },
 });
