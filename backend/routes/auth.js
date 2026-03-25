@@ -3,6 +3,28 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import User from "../models/User.js";
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "profile_images",
+    allowed_formats: ["jpg", "png", "jpeg"],
+  },
+});
+
+const upload = multer({ storage });
+
 
 const router = express.Router();
 
@@ -68,6 +90,7 @@ router.post("/register", async (req, res) => {
       password: hashedPassword,
       address,
       skills,
+      profileImage : "https://res.cloudinary.com/djs5bhgwg/image/upload/v1774383665/fad5e79954583ad50ccb3f16ee64f66d_xapp4i.jpg",
     });
 
     await newUser.save();
@@ -139,5 +162,59 @@ router.post("/reset-password", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+router.put(
+  "/update-profile",
+  upload.single("profileImage"),
+  async (req, res) => {
+    try {
+      console.log("ROUTE HIT");
+
+      // ✅ SAFE loggin
+      console.log("BODY:", req.body || "No body");
+      console.log("FILE:", req.file || "No file");
+
+      const { id, name, email, phone, address, skills } = req.body || {};
+
+      if (!id) {
+        return res.status(400).json({ message: "Missing user ID" });
+      }
+
+      const user = await User.findById(id);
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // ✅ update fields safely
+      if (name) user.name = name;
+      if (email) user.email = email;
+      if (phone) user.phone = phone;
+      if (address) user.address = address;
+      if (skills) user.skills = skills;
+
+      // ✅ SAFE image handling
+      if (req.file && req.file.path) {
+        user.profileImage = req.file.path;
+      }
+
+      await user.save();
+
+      return res.json({
+        message: "Profile updated",
+        user,
+      });
+    } catch (err) {
+      console.log("FULL ERROR:", err); // 🔥 THIS IS KEY
+      return res.status(500).json({
+        message: "Server error",
+        error: err.message,
+      });
+    }
+  }
+);
+
+
+
 
 export default router;
