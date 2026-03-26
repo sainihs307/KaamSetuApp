@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -17,6 +18,7 @@ import {
 import { KColors as Colors, Radius } from "../constants/kaamsetuTheme";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+const BASE_URL = "http://172.27.16.252:8030";
 
 import * as ImagePicker from "expo-image-picker";
 
@@ -83,7 +85,7 @@ export default function UpdateProfileScreen() {
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
-
+  const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -129,6 +131,7 @@ export default function UpdateProfileScreen() {
     try {
       console.log("CLICKED"); // debug
       console.log("IMAGE:", image);
+      setSaving(true); // 🔥 START LOADING
 
       const storedUser = await AsyncStorage.getItem("user");
       const parsedUser = JSON.parse(storedUser!);
@@ -144,18 +147,26 @@ export default function UpdateProfileScreen() {
       formData.append("skills", workerTags);
 
       // 🔥 ADD IMAGE
+      // if (image) {
+      //   const filename = image.split("/").pop();
+      //   const match = /\.(\w+)$/.exec(filename || "");
+      //   const type = match ? `image/${match[1]}` : `image`;
+
+      //   formData.append("profileImage", {
+      //     uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+      //     name: filename,
+      //     type: type,
+      //   } as any);
+      // }
       if (image) {
-        const filename = image.split("/").pop();
-        const match = /\.(\w+)$/.exec(filename || "");
-        const type = match ? `image/${match[1]}` : `image`;
+        const filename = image.split("/").pop() || "photo.jpg";
 
         formData.append("profileImage", {
-          uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+          uri: image,
           name: filename,
-          type: type,
+          type: "image/jpeg", // force this (important)
         } as any);
       }
-
       // 🔥 CALL BACKEND
       const res = await fetch(
         "http://172.23.17.67:8030/api/auth/update-profile",
@@ -176,13 +187,16 @@ export default function UpdateProfileScreen() {
 
       // ✅ update local storage
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
+      router.replace("/(tabs)/account"); // 🔥 direct account page
 
       Alert.alert("Success", "Profile updated!", [
-        { text: "OK", onPress: () => router.back() },
+        { text: "OK", onPress: () => router.replace("/(tabs)/account") },
       ]);
     } catch (err) {
       console.log(err);
       Alert.alert("Error", "Server error");
+    } finally {
+      setSaving(false); // 🔥 STOP LOADING
     }
   };
 
@@ -249,11 +263,35 @@ export default function UpdateProfileScreen() {
           </View>
 
           {/* Save Button */}
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-            <Text style={styles.saveBtnText}>Save Changes</Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.saveBtnText}>Save Changes</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+      {saving && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.3)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
     </SafeAreaView>
   );
 }

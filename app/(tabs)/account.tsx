@@ -14,13 +14,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   KColors as Colors,
   Radius,
   Shadow,
   Spacing,
 } from "../../constants/kaamsetuTheme";
-import { myApplications, referrals } from "../../constants/mockData";
+
 
 const API_URL = "http://172.23.17.67:8030";
 
@@ -116,7 +117,9 @@ function StatusBadge({ status }: { status: string }) {
       color: Colors.error,
     },
   };
-  const s = map[status] ?? map["pending"];
+
+  const s = map[status] ?? map.pending;
+
   return (
     <View style={[styles.badge, { backgroundColor: s.bg }]}>
       <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
@@ -146,12 +149,27 @@ type JobType = {
   noBudget?: boolean;
 };
 
+type ReferralType = {
+  _id: string;
+  workerName: string;
+  workerPhone: string;
+  skills?: string[];
+  createdAt?: string;
+  jobId?: {
+    _id: string;
+    title?: string;
+    company?: string;
+  };
+};
+
 export default function AccountScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<UserType | null>(null);
   const [myRequests, setMyRequests] = useState<JobType[]>([]);
+  const [myReferrals, setMyReferrals] = useState<ReferralType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [myApplications, setMyApplications] = useState<any[]>([]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -162,49 +180,80 @@ export default function AccountScreen() {
   };
 
   const loadAccountData = async () => {
-    setLoading(true);
+    setLoading(true); // 🔥 ADD THIS
     try {
+      setLoading(true);
+
       const token = await AsyncStorage.getItem("token");
       const userString = await AsyncStorage.getItem("user");
 
       if (!token || !userString) {
-        setLoading(false);
+        setUser(null);
+        setMyRequests([]);
+        setMyReferrals([]);
         return;
       }
 
       const parsedUser: UserType = JSON.parse(userString);
       setUser(parsedUser);
 
-      const requestsRes = await fetch(
-        `${API_URL}/api/jobs/my-requests/${parsedUser._id}`,
-        {
+      const [requestsRes, referralsRes] = await Promise.all([
+        fetch(`${API_URL}/api/jobs/my-requests/${parsedUser._id}`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+        }),
+        fetch(`${API_URL}/api/referral`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
+
+      const appsRes = await fetch(
+        `${API_URL}/api/applications/my-applications`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
         },
       );
+      const appsData = await appsRes.json();
+      if (appsRes.ok) {
+        setMyApplications(appsData.applications || []);
+      }
 
       const requestsData = await requestsRes.json();
+      const referralsData = await referralsRes.json();
 
       if (requestsRes.ok && Array.isArray(requestsData)) {
         setMyRequests(requestsData);
       } else {
         setMyRequests([]);
       }
+
+      if (referralsRes.ok && Array.isArray(referralsData.referrals)) {
+        setMyReferrals(referralsData.referrals);
+      } else {
+        setMyReferrals([]);
+      }
     } catch (error) {
       console.log("Account load error:", error);
       setMyRequests([]);
+      setMyReferrals([]);
     } finally {
       setLoading(false);
     }
   };
-
+  // ✅ REPLACE WITH THIS
   useFocusEffect(
     useCallback(() => {
       onRefresh();
-      return () => {};
+
+      return () => {
+        // optional cleanup (safe)
+      };
     }, []),
   );
+  // if (!user) return null;
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem("token");
@@ -290,7 +339,11 @@ export default function AccountScreen() {
           <View style={styles.profileTop}>
             <Avatar
               name={user?.name || "User"}
-              profileImage={user?.profileImage}
+              profileImage={
+                user?.profileImage
+                  ? `${API_URL}${user.profileImage}`
+                  : undefined
+              }
               size={72}
             />
 
@@ -301,7 +354,7 @@ export default function AccountScreen() {
                 </Text>
 
                 <TouchableOpacity
-                  onPress={() => router.push("/update-profile")}
+                  onPress={handleUpdateProfile}
                   style={styles.editIcon}
                 >
                   <Text style={styles.editIconText}>✏️</Text>
@@ -310,7 +363,6 @@ export default function AccountScreen() {
 
               <StarRating rating={user?.rating || 0} />
 
-              {/* Skills */}
               {user?.skills && user.skills.length > 0 && (
                 <View style={styles.tagsRow}>
                   {user.skills.map((tag) => (
@@ -321,7 +373,6 @@ export default function AccountScreen() {
                 </View>
               )}
 
-              {/* Extra details (from other branch) */}
               <Text style={styles.profileText}>
                 Email: {user?.email || "-"}
               </Text>
@@ -342,7 +393,7 @@ export default function AccountScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>My Requests (Current)</Text>
+        <SectionHeader title="My Requests (Current)" />
 
         {loading ? (
           <View style={styles.centered}>
@@ -372,7 +423,7 @@ export default function AccountScreen() {
 
               <Text style={styles.requestSub}>{job.description}</Text>
               <Text style={styles.requestSub}>Address: {job.address}</Text>
-              <Text style={styles.requestSub}>Status: {job.status}</Text>
+              <StatusBadge status={job.status} />
 
               {job.noBudget ? (
                 <Text style={styles.requestSub}>Budget: Not specified</Text>
@@ -393,6 +444,8 @@ export default function AccountScreen() {
           ))
         )}
 
+        <SectionHeader title="My Applications" />
+
         <Text style={styles.sectionTitle}>My Applications</Text>
 
         {myApplications.length === 0 ? (
@@ -400,31 +453,38 @@ export default function AccountScreen() {
             <Text style={styles.emptyText}>No applications found.</Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.quickCard}
-            onPress={handleOpenApplications}
-          >
-            <Text style={styles.quickCardTitle}>Applications</Text>
-            <Text style={styles.quickCardSub}>
-              {myApplications.length} application(s) available
-            </Text>
-          </TouchableOpacity>
+          myApplications.map((app) => (
+            <View key={app._id} style={styles.requestCard}>
+              <Text style={styles.requestTitle}>{app.jobId?.category}</Text>
+              <Text style={styles.requestSub}>Status: {app.status}</Text>
+              <Text style={styles.requestSub}>
+                Expected Pay: ₹{app.expectedPay}
+              </Text>
+              <Text style={styles.requestSub}>
+                Applied: {new Date(app.createdAt).toLocaleDateString()}
+              </Text>
+            </View>
+          ))
         )}
 
-        <Text style={styles.sectionTitle}>Referrals</Text>
+        <SectionHeader title="Referred Workers" />
 
-        {referrals.length === 0 ? (
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="small" color={Colors.primary} />
+          </View>
+        ) : myReferrals.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No referrals found.</Text>
+            <Text style={styles.emptyText}>No referred workers found.</Text>
           </View>
         ) : (
           <TouchableOpacity
             style={styles.quickCard}
             onPress={handleOpenReferrals}
           >
-            <Text style={styles.quickCardTitle}>Referrals</Text>
+            <Text style={styles.quickCardTitle}>Referred Workers</Text>
             <Text style={styles.quickCardSub}>
-              {referrals.length} referral item(s) available
+              {myReferrals.length} referred worker(s) available
             </Text>
           </TouchableOpacity>
         )}
@@ -441,6 +501,7 @@ export default function AccountScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+
   header: {
     backgroundColor: Colors.primary,
     alignItems: "center",
@@ -451,15 +512,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
   },
+
   scrollContent: {
     padding: Spacing.md,
     gap: 14,
   },
+
   centered: {
     paddingVertical: 28,
     alignItems: "center",
     justifyContent: "center",
   },
+
   profileCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -468,6 +532,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     ...Shadow.md,
     gap: 12,
+  },
+  profileTop: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+  },
+  profileInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   profileName: {
     fontSize: 20,
@@ -478,6 +556,80 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
   },
+  editIcon: {
+    padding: 4,
+  },
+  editIconText: {
+    fontSize: 16,
+  },
+
+  avatar: {
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: Colors.white,
+    fontWeight: "700",
+  },
+
+  starsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  ratingText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+  },
+  tag: {
+    backgroundColor: Colors.primary + "20",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tagText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: "600",
+  },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 6,
+  },
+  sectionAccent: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Colors.textPrimary,
+  },
+
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   primaryBtn: {
     backgroundColor: Colors.primary,
     borderRadius: Radius.full,
@@ -493,7 +645,31 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: Colors.textPrimary,
     marginTop: 6,
+
+  outlineBtn: {
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
   },
+  outlineBtnText: {
+    color: Colors.primary,
+    fontWeight: "700",
+  },
+
+  logoutBtn: {
+    backgroundColor: "#D9534F",
+    borderRadius: Radius.full,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  logoutBtnText: {
+    color: Colors.white,
+    fontWeight: "700",
+  },
+
   emptyCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -505,6 +681,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.textMuted,
   },
+
   requestCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -515,6 +692,7 @@ const styles = StyleSheet.create({
     gap: 6,
     position: "relative", // Ensure absolute children position relative to this card
   },
+
   requestTitle: {
     fontSize: 17,
     fontWeight: "700",

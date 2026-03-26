@@ -4,6 +4,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { useRouter } from "expo-router"; // ✅ Added
 import { useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   Alert,
   SafeAreaView,
@@ -163,20 +164,29 @@ export default function PostJob() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
+  <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={{ flex: 1 }}>
+    <StatusBar barStyle="light-content" />
 
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Post Job</Text>
-      </View>
+    <ScrollView contentContainerStyle={{ padding: 20 }}>
 
-      <ScrollView contentContainerStyle={styles.container}>
+      {/* TOP */}
+      <Text style={styles.logo}>KaamSetu</Text>
+      <Text style={styles.subtitle}>Post a Job Easily</Text>
+
+      {/* MAIN CARD */}
+      <View style={styles.card}>
+
         <Text style={styles.title}>Post New Job</Text>
 
+        {/* Category */}
         <Text style={styles.label}>Category *</Text>
-        <View style={styles.card}>
-          <Picker selectedValue={category} onValueChange={setCategory}>
-            <Picker.Item label="Select category" value="" />
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={category}
+            onValueChange={setCategory}
+            style={{ color: category ? "#000" : "#999" }}
+          >
+            <Picker.Item label="Select category" value="" color="#999" />
             {categories.map((item, i) => (
               <Picker.Item key={i} label={item} value={item} />
             ))}
@@ -377,9 +387,10 @@ export default function PostJob() {
           <Text style={styles.buttonText}>Post Job Now</Text>
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+          <View style={{ height: 40 }} />
+          </View>
       </ScrollView>
-    </SafeAreaView>
+    </LinearGradient>
   );
 }
 
@@ -391,22 +402,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerTitle: { color: Colors.white, fontSize: 20, fontWeight: "bold" },
-  title: { fontSize: 22, fontWeight: "bold" },
-  label: { marginTop: 12, fontWeight: "600" },
+  title: {
+  fontSize: 20,
+  fontWeight: "bold",
+  textAlign: "center",
+  marginBottom: 10,
+  color: Colors.textPrimary,
+},
+  label: { marginTop: 12, fontWeight: "600", color: Colors.textSecondary },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.primaryPale,
     padding: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
     borderRadius: 10,
-    marginTop: 6,
+    marginTop: 10,
   },
   inputFlex: { flex: 1, marginLeft: 10 },
   button: {
-    backgroundColor: Colors.primary,
-    padding: 15,
-    borderRadius: 10,
+    backgroundColor: "#3399F3",
+    padding: 16,
+    borderRadius: 12,
     marginTop: 20,
   },
   buttonText: {
@@ -419,14 +435,14 @@ const styles = StyleSheet.create({
   durationContainer: { flexDirection: "row", marginTop: 10, gap: 10 },
   durationButton: {
     flex: 1,
-    padding: 10,
+    padding: 12,
     borderWidth: 1,
-    borderColor: Colors.primary,
-    borderRadius: 10,
+    borderColor: Colors.primaryPale,
+    borderRadius: 12,
     alignItems: "center",
   },
   durationSelected: { backgroundColor: Colors.primary },
-  durationText: { color: Colors.primary },
+  durationText: { color: "#333" , fontWeight: "500" },
   checkboxRow: { flexDirection: "row", alignItems: "center", marginTop: 10 },
   checkbox: {
     width: 22,
@@ -442,5 +458,32 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     margin: 3,
   },
-  card: { marginTop: 6 },
+  pickerContainer: {
+  backgroundColor: Colors.primaryPale,
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: "#ddd",
+  marginTop: 6,
+  paddingHorizontal: 5,
+  },
+  
+  logo: {
+  fontSize: 32,
+  fontWeight: "bold",
+  textAlign: "center",
+  color: "#fff",
+},
+
+subtitle: {
+  textAlign: "center",
+  color: "#eee",
+  marginBottom: 20,
+},
+
+card: {
+  backgroundColor: Colors.white,
+  padding: 20,
+  borderRadius: 20,
+  borderColor: Colors.cardBorder,
+},
 });

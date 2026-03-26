@@ -14,6 +14,8 @@ import applicationRoutes from "./routes/applicationRoutes.js"; // ✅ NEW
 import authRoutes from "./routes/auth.js";
 import chatRoutes from "./routes/chat.js"; // ✅ NEW
 import jobRoutes from "./routes/jobRoutes.js";
+import referralRoutes from "./routes/referral.js";
+
 
 const app = express();
 
@@ -25,6 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes); // ✅ NEW
 app.use("/api/chat", chatRoutes); // ✅ NEW
+app.use("/api/referral", referralRoutes);
 
 app.use("/uploads", express.static("uploads"));
 

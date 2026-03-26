@@ -16,7 +16,7 @@ const router = express.Router();
 // Called when worker clicks "Apply Now" on Live Jobs page
 router.post("/apply", auth, async(req, res) => {
     try {
-        const { jobId, expectedPay, preferredTime } = req.body;
+        const { jobId, expectedPay, preferredTime, remarks} = req.body;
 
         if (!jobId || !expectedPay || !preferredTime) {
             return res.status(400).json({
@@ -57,6 +57,7 @@ router.post("/apply", auth, async(req, res) => {
             expectedPay,
             preferredTime,
             status: "pending",
+            remarks,
         });
 
         await application.save();
@@ -198,6 +199,28 @@ router.put("/reject/:applicationId", auth, async(req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+});
+
+// ✅ GET applications for jobs posted by current user
+
+router.get("/received", auth, async (req, res) => {
+  try {
+    const userId = req.user.id; // 👈 from token
+
+    const myJobs = await Job.find({ posterId: userId });
+
+    const jobIds = myJobs.map((job) => job._id);
+
+    const applications = await Application.find({
+      jobId: { $in: jobIds },
+    })
+      .populate("jobId")
+      .populate("workerId");
+
+    res.json({ applications });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ================= WORKER WITHDRAWS APPLICATION =================
