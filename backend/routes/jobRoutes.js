@@ -34,16 +34,51 @@ router.get("/my-requests/:userId", async (req, res) => {
   }
 });
 
-// 🌍 Route to get ALL live jobs
-router.get("/jobs", async (req, res) => {
+// ✅ 1. Update Job Status (Move from Pending -> In-Progress -> Completed)
+router.patch("/:id/status", async (req, res) => {
+  const { status } = req.body;
   try {
-    const jobs = await Job.find()
-      .sort({ createdAt: -1 });
-
-    res.json({ jobs }); // ✅ IMPORTANT FORMAT
+    const updatedJob = await Job.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true },
+    );
+    res.status(200).json(updatedJob);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ error: "Failed to update status" });
   }
 });
+router.delete("/:id", async (req, res) => {
+  try {
+    const job = await Job.findById(req.params.id);
 
+    if (!job) {
+      console.log(`❌ [DELETE] Job ${req.params.id} not found.`);
+      return res.status(404).json({ error: "Job not found in database." });
+    }
+
+    // 🔥 LOGGING: This will show up in Niraj's terminal
+    console.log(`--- Delete Request for ID: ${req.params.id} ---`);
+    console.log(`Raw Status from DB: "${job.status}"`);
+
+    // 🔥 THE BULLETPROOF CHECK
+    // .trim() removes spaces, .toLowerCase() ignores Capital letters
+    const cleanStatus = (job.status || "").trim().toLowerCase();
+
+    if (cleanStatus !== "pending") {
+      console.log(`❌ [BLOCKED] Status is "${cleanStatus}", not "pending"`);
+      return res.status(400).json({
+        error: "Could not delete. It might be in progress.",
+        server_saw_status: job.status,
+      });
+    }
+
+    await Job.findByIdAndDelete(req.params.id);
+    console.log("✅ [SUCCESS] Job deleted from database.");
+    res.status(200).json({ message: "Job deleted successfully" });
+  } catch (err) {
+    console.error("🔥 [SERVER ERROR]", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 export default router; // ✅ Correct way for ES Modules

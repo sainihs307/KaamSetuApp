@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   RefreshControl,
   ScrollView,
@@ -21,7 +22,7 @@ import {
 } from "../../constants/kaamsetuTheme";
 
 
-const API_URL = "http://172.27.16.252:8030";
+const API_URL = "http://172.23.17.67:8030";
 
 // ─── Reusable Components ────────────────────────────────────────────────────
 
@@ -171,12 +172,10 @@ export default function AccountScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-
     await loadAccountData();
-
     setTimeout(() => {
       setRefreshing(false);
-    }, 500); // smooth feel
+    }, 500);
   };
 
   const loadAccountData = async () => {
@@ -273,6 +272,54 @@ export default function AccountScreen() {
     router.push("/referrals");
   };
 
+  // 🔥 CLEANED: Delete Job Handler (Production Ready)
+  const handleDeleteJob = (jobId: string) => {
+    Alert.alert(
+      "Delete Request",
+      "Are you sure you want to delete this job request? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+
+              const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+
+              const data = await response.json();
+
+              if (response.ok) {
+                // Remove the deleted job from the local state
+                setMyRequests((prevRequests) =>
+                  prevRequests.filter((job) => job._id !== jobId),
+                );
+                Alert.alert("Success", "Job deleted successfully.");
+              } else {
+                Alert.alert("Error", data.error || "Failed to delete the job.");
+              }
+            } catch (error) {
+              console.log("Delete error:", error);
+              Alert.alert(
+                "Error",
+                "A network error occurred while trying to delete.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.primary} />
@@ -358,7 +405,21 @@ export default function AccountScreen() {
         ) : (
           myRequests.map((job) => (
             <View key={job._id} style={styles.requestCard}>
-              <Text style={styles.requestTitle}>{job.category}</Text>
+              {/* 🔥 ADDED: Small Top-Right Delete Icon */}
+              {job.status.toLowerCase() === "pending" && (
+                <TouchableOpacity
+                  style={styles.topRightDeleteBtn}
+                  onPress={() => handleDeleteJob(job._id)}
+                >
+                  <Text style={styles.topRightDeleteIcon}>🗑️</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Added paddingRight to title so long text doesn't overlap the icon */}
+              <Text style={[styles.requestTitle, { paddingRight: 30 }]}>
+                {job.category}
+              </Text>
+
               <Text style={styles.requestSub}>{job.description}</Text>
               <Text style={styles.requestSub}>Address: {job.address}</Text>
               <StatusBadge status={job.status} />
@@ -371,6 +432,7 @@ export default function AccountScreen() {
                 </Text>
               )}
 
+              {/* 🔥 REVERTED: Standard Full-Width Outline Button */}
               <TouchableOpacity
                 style={styles.outlineBtn}
                 onPress={() => router.push(`/applications?jobId=${job._id}`)}
@@ -578,6 +640,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+
   outlineBtn: {
     marginTop: 10,
     borderWidth: 1.5,
@@ -622,6 +685,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     ...Shadow.md,
     gap: 6,
+    position: "relative", // Ensure absolute children position relative to this card
   },
 
   requestTitle: {
@@ -633,6 +697,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.textSecondary,
   },
+
+  // 🔥 ADDED: Styles for the top-right delete icon
+  topRightDeleteBtn: {
+    position: "absolute",
+    top: Spacing.md, // Aligns perfectly with the padding of the card
+    right: Spacing.md,
+    zIndex: 10,
+    padding: 4, // Makes the touch target a bit larger so it's easy to tap
+  },
+  topRightDeleteIcon: {
+    fontSize: 20,
+  },
+
+
 
   quickCard: {
     backgroundColor: Colors.cardBg,
@@ -652,5 +730,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
-  
+
+
 });

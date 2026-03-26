@@ -3,18 +3,17 @@ import "./config.js";
 // import authRoutes from "./routes/auth.js";
 // import cors from "cors";
 // import express from "express";
-import dns from 'dns';
+import dns from "dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
 // server.js — updated with all routes
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
 import mongoose from "mongoose";
-import authRoutes from "./routes/auth.js";
-import jobRoutes from "./routes/jobRoutes.js";
 import applicationRoutes from "./routes/applicationRoutes.js"; // ✅ NEW
+import authRoutes from "./routes/auth.js";
 import chatRoutes from "./routes/chat.js"; // ✅ NEW
+import jobRoutes from "./routes/jobRoutes.js";
 import referralRoutes from "./routes/referral.js";
 
 
@@ -33,14 +32,14 @@ app.use("/api/referral", referralRoutes);
 app.use("/uploads", express.static("uploads"));
 
 app.get("/", (req, res) => {
-    res.send("API is running...");
+  res.send("API is running...");
 });
 
 mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => console.log("✅ MongoDB Connected"))
-    .catch((err) => console.log(err));
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.log(err));
 
 app.listen(8030, "0.0.0.0", () => {
-    console.log("Server running on port 8030");
+  console.log("Server running on port 8030");
 });
