@@ -3,14 +3,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 
 export default function Register() {
@@ -88,11 +88,11 @@ export default function Register() {
   // OTP
   const handleSendOTP = async () => {
     try {
-    if (parts.length !== 2 || !parts[1].includes(".")) {
-      setError("Enter valid email with domain");
-      return;
-    }
-    setSendingOtp(true); // 🔥 START LOADING
+      if (parts.length !== 2 || !parts[1].includes(".")) {
+        setError("Enter valid email with domain");
+        return;
+      }
+      setSendingOtp(true); // 🔥 START LOADING
       const res = await fetch("http://172.27.16.252:8030/api/auth/send-otp", {
         method: "POST",
         headers: {
@@ -132,9 +132,9 @@ export default function Register() {
       }
 
       if (phone.length !== 10) {
-      setError("Phone number must be exactly 10 digits");
-      return;
-    }
+        setError("Phone number must be exactly 10 digits");
+        return;
+      }
 
       const finalOtp = otp.join("");
 
@@ -235,22 +235,22 @@ export default function Register() {
                 />
               </View>
 
-            <TouchableOpacity
-              style={[
-                styles.otpBtn,
-                (timer > 0 || sendingOtp) && { opacity: 0.6 },
-              ]}
-              onPress={handleSendOTP}
-              disabled={timer > 0 || sendingOtp}
-            >
-              <Text style={{ fontSize: 12 }}>
-                {sendingOtp
-                  ? "Sending..."
-                  : timer > 0
-                  ? `Wait ${timer}s`
-                  : "Verify OTP"}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.otpBtn,
+                  (timer > 0 || sendingOtp) && { opacity: 0.6 },
+                ]}
+                onPress={handleSendOTP}
+                disabled={timer > 0 || sendingOtp}
+              >
+                <Text style={{ fontSize: 12 }}>
+                  {sendingOtp
+                    ? "Sending..."
+                    : timer > 0
+                      ? `Wait ${timer}s`
+                      : "Verify OTP"}
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* Resend OTP */}

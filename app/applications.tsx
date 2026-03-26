@@ -60,7 +60,7 @@ export default function ApplicationsScreen() {
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
   const [applications, setApplications] = useState<any[]>([]);
-  const BASE_URL = "http://172.24.202.171:8000/api";
+  const BASE_URL = "http://172.27.16.252:8030/api";
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
 
   const fetchApplications = async () => {

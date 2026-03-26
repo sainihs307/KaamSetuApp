@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl } from "react-native";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -162,9 +162,9 @@ export default function AccountScreen() {
       setRefreshing(false);
     }, 500); // smooth feel
   };
-  
+
   const loadAccountData = async () => {
-  setLoading(true); // 🔥 ADD THIS
+    setLoading(true); // 🔥 ADD THIS
     try {
       const token = await AsyncStorage.getItem("token");
       const userString = await AsyncStorage.getItem("user");
@@ -186,13 +186,16 @@ export default function AccountScreen() {
         },
       );
 
-      const appsRes = await fetch(`${API_URL}/api/applications/my-applications`, {
-  headers: { Authorization: `Bearer ${token}` },
-});
-const appsData = await appsRes.json();
-if (appsRes.ok) {
-  setMyApplications(appsData.applications || []);
-}
+      const appsRes = await fetch(
+        `${API_URL}/api/applications/my-applications`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      const appsData = await appsRes.json();
+      if (appsRes.ok) {
+        setMyApplications(appsData.applications || []);
+      }
 
       const requestsData = await requestsRes.json();
 
@@ -209,18 +212,16 @@ if (appsRes.ok) {
     }
   };
   // ✅ REPLACE WITH THIS
-    useFocusEffect(
-      useCallback(() => {
-        onRefresh();
+  useFocusEffect(
+    useCallback(() => {
+      onRefresh();
 
-        return () => {
-          // optional cleanup (safe)
-        };
-      }, [])
-    );
+      return () => {
+        // optional cleanup (safe)
+      };
+    }, []),
+  );
   // if (!user) return null;
-
-
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem("token");
@@ -249,16 +250,20 @@ if (appsRes.ok) {
       </View>
 
       <ScrollView
-                  contentContainerStyle={styles.scrollContent}
-                  refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                  }
-                >
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.profileCard}>
           <View style={styles.profileTop}>
             <Avatar
               name={user?.name || "User"}
-              profileImage={user?.profileImage}
+              profileImage={
+                user?.profileImage
+                  ? `${API_URL}${user.profileImage}`
+                  : undefined
+              }
               size={72}
             />
 
@@ -308,8 +313,6 @@ if (appsRes.ok) {
           >
             <Text style={styles.primaryBtnText}>Update Profile</Text>
           </TouchableOpacity>
-
-          
         </View>
 
         <Text style={styles.sectionTitle}>My Requests (Current)</Text>
@@ -352,22 +355,24 @@ if (appsRes.ok) {
 
         <Text style={styles.sectionTitle}>My Applications</Text>
 
-{myApplications.length === 0 ? (
-  <View style={styles.emptyCard}>
-    <Text style={styles.emptyText}>No applications found.</Text>
-  </View>
-) : (
-  myApplications.map((app) => (
-    <View key={app._id} style={styles.requestCard}>
-      <Text style={styles.requestTitle}>{app.jobId?.category}</Text>
-      <Text style={styles.requestSub}>Status: {app.status}</Text>
-      <Text style={styles.requestSub}>Expected Pay: ₹{app.expectedPay}</Text>
-      <Text style={styles.requestSub}>
-        Applied: {new Date(app.createdAt).toLocaleDateString()}
-      </Text>
-    </View>
-  ))
-)}
+        {myApplications.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No applications found.</Text>
+          </View>
+        ) : (
+          myApplications.map((app) => (
+            <View key={app._id} style={styles.requestCard}>
+              <Text style={styles.requestTitle}>{app.jobId?.category}</Text>
+              <Text style={styles.requestSub}>Status: {app.status}</Text>
+              <Text style={styles.requestSub}>
+                Expected Pay: ₹{app.expectedPay}
+              </Text>
+              <Text style={styles.requestSub}>
+                Applied: {new Date(app.createdAt).toLocaleDateString()}
+              </Text>
+            </View>
+          ))
+        )}
 
         <Text style={styles.sectionTitle}>Referrals</Text>
 

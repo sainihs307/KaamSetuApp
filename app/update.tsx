@@ -1,26 +1,31 @@
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    KColors as Colors,
-    Radius,
-    Shadow,
-    Spacing,
+  KColors as Colors,
+  Radius,
+  Shadow,
+  Spacing,
 } from "../constants/kaamsetuTheme";
-import { currentUser } from "../constants/mockData";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
+const BASE_URL = "http://172.27.16.252:8030";
+
+// Avatar Component
 function Avatar({ name, size = 80 }: { name: string; size?: number }) {
   const initials = name
     .split(" ")
@@ -79,22 +84,109 @@ function InputField({
   );
 }
 
+// MAIN SCREEN
 export default function UpdateProfileScreen() {
   const router = useRouter();
 
-  const [name, setName] = useState(currentUser.name);
-  const [email, setEmail] = useState(currentUser.email);
-  const [phone, setPhone] = useState(currentUser.phone);
-  const [address, setAddress] = useState(currentUser.address);
-  const [workerTags, setWorkerTags] = useState(
-    currentUser.workerTags.join(", "),
-  );
+  const [user, setUser] = useState<any>(null);
 
-  const handleSave = () => {
-    // In real app, would call API here
-    Alert.alert("Success", "Profile updated successfully!", [
-      { text: "OK", onPress: () => router.back() },
-    ]);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [workerTags, setWorkerTags] = useState("");
+  const [image, setImage] = useState<string | null>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  // Load user from AsyncStorage
+  useEffect(() => {
+    const loadUser = async () => {
+      const storedUser = await AsyncStorage.getItem("user");
+
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+
+        setUser(parsed);
+        setName(parsed.name || "");
+        setEmail(parsed.email || "");
+        setPhone(parsed.phone || "");
+        setAddress(parsed.address || "");
+        setWorkerTags(parsed.skills || "");
+        setProfileImage(parsed.profileImage || null);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  // Save changes
+  const handleSave = async () => {
+    try {
+      console.log("CLICKED");
+      console.log("IMAGE:", image);
+
+      const storedUser = await AsyncStorage.getItem("user");
+      const parsedUser = JSON.parse(storedUser!);
+
+      const formData = new FormData();
+
+      formData.append("id", parsedUser._id);
+      formData.append("name", name);
+      formData.append("email", email);
+      formData.append("phone", phone);
+      formData.append("address", address);
+      formData.append("skills", workerTags);
+
+      if (image) {
+        const filename = image.split("/").pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : `image`;
+
+        formData.append("profileImage", {
+          uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+          name: filename,
+          type: type,
+        } as any);
+      }
+
+      const res = await fetch(
+        "http://172.27.16.252:8030/api/auth/update-profile",
+        {
+          method: "PUT",
+          body: formData,
+        },
+      );
+
+      const data = await res.json();
+
+      console.log("RESPONSE:", data);
+
+      if (!res.ok) {
+        Alert.alert("Error", data.message);
+        return;
+      }
+
+      // Update local storage
+      await AsyncStorage.setItem("user", JSON.stringify(data.user));
+
+      Alert.alert("Success", "Profile updated!", [
+        { text: "OK", onPress: () => router.back() },
+      ]);
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Error", "Server error");
+    }
   };
 
   return (
@@ -120,13 +212,26 @@ export default function UpdateProfileScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Avatar */}
+          {/* Avatar */}
           <View style={styles.avatarSection}>
-            <Avatar name={name} size={90} />
-            <TouchableOpacity style={styles.changePhotoBtn}>
-              <Text style={styles.changePhotoText}>Change Photo</Text>
+            {image ? (
+              <Image
+                source={{ uri: image }}
+                style={{ width: 90, height: 90, borderRadius: 45 }}
+              />
+            ) : profileImage ? (
+              <Image
+                source={{ uri: profileImage }}
+                style={{ width: 90, height: 90, borderRadius: 45 }}
+              />
+            ) : (
+              <Avatar name={name} size={90} />
+            )}
+
+            <TouchableOpacity style={styles.changePhotoBtn} onPress={pickImage}>
+              <Text>Change Photo</Text>
             </TouchableOpacity>
           </View>
-
           {/* Form Card */}
           <View style={styles.formCard}>
             <InputField

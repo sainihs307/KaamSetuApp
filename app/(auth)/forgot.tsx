@@ -45,11 +45,11 @@ export default function ForgotPassword() {
   // ✅ SEND OTP
   const handleSendOTP = async () => {
     try {
-    if (parts.length !== 2 || !parts[1].includes(".")) {
-      setError("Enter valid email with domain");
-      return;
-    }
-    setSendingOtp(true); // 🔥 START
+      if (parts.length !== 2 || !parts[1].includes(".")) {
+        setError("Enter valid email with domain");
+        return;
+      }
+      setSendingOtp(true); // 🔥 START
 
       const res = await fetch("http://172.27.16.252:8030/api/auth/send-otp", {
         method: "POST",
@@ -74,7 +74,7 @@ export default function ForgotPassword() {
       console.log(err);
       setError("Error sending OTP");
     } finally {
-      setSendingOtp(false);  // 🔥 STOP
+      setSendingOtp(false); // 🔥 STOP
     }
   };
 
@@ -182,8 +182,8 @@ export default function ForgotPassword() {
           >
             <Text style={{ fontSize: 12 }}>
               {sendingOtp
-                  ? "Sending..."
-                  : timer > 0
+                ? "Sending..."
+                : timer > 0
                   ? `Wait ${timer}s`
                   : "Verify"}
             </Text>
@@ -195,9 +195,9 @@ export default function ForgotPassword() {
           <Text style={styles.timerText}>Resend OTP in {timer}s</Text>
         ) : (
           <TouchableOpacity
-                onPress={handleSendOTP}
-                disabled={timer > 0 || sendingOtp}
-              >
+            onPress={handleSendOTP}
+            disabled={timer > 0 || sendingOtp}
+          >
             <Text style={styles.resendText}>Resend OTP</Text>
           </TouchableOpacity>
         )}

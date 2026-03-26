@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator } from "react-native";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -18,6 +18,7 @@ import {
 import { KColors as Colors, Radius } from "../constants/kaamsetuTheme";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
+const BASE_URL = "http://172.27.16.252:8030";
 
 import * as ImagePicker from "expo-image-picker";
 
@@ -146,18 +147,26 @@ export default function UpdateProfileScreen() {
       formData.append("skills", workerTags);
 
       // 🔥 ADD IMAGE
+      // if (image) {
+      //   const filename = image.split("/").pop();
+      //   const match = /\.(\w+)$/.exec(filename || "");
+      //   const type = match ? `image/${match[1]}` : `image`;
+
+      //   formData.append("profileImage", {
+      //     uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+      //     name: filename,
+      //     type: type,
+      //   } as any);
+      // }
       if (image) {
-        const filename = image.split("/").pop();
-        const match = /\.(\w+)$/.exec(filename || "");
-        const type = match ? `image/${match[1]}` : `image`;
+        const filename = image.split("/").pop() || "photo.jpg";
 
         formData.append("profileImage", {
-          uri: Platform.OS === "android" ? image : image.replace("file://", ""),
+          uri: image,
           name: filename,
-          type: type,
+          type: "image/jpeg", // force this (important)
         } as any);
       }
-
       // 🔥 CALL BACKEND
       const res = await fetch(
         "http://172.27.16.252:8030/api/auth/update-profile",
@@ -180,9 +189,9 @@ export default function UpdateProfileScreen() {
       await AsyncStorage.setItem("user", JSON.stringify(data.user));
       router.replace("/(tabs)/account"); // 🔥 direct account page
 
-  Alert.alert("Success", "Profile updated!", [
-    { text: "OK", onPress: () => router.replace("/(tabs)/account") },
-  ]);
+      Alert.alert("Success", "Profile updated!", [
+        { text: "OK", onPress: () => router.replace("/(tabs)/account") },
+      ]);
     } catch (err) {
       console.log(err);
       Alert.alert("Error", "Server error");
@@ -268,21 +277,21 @@ export default function UpdateProfileScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       {saving && (
-  <View
-    style={{
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0,0,0,0.3)",
-      justifyContent: "center",
-      alignItems: "center",
-    }}
-  >
-    <ActivityIndicator size="large" color="#fff" />
-  </View>
-)}
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.3)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
