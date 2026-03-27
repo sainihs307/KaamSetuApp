@@ -622,7 +622,7 @@ export default function LiveJobsScreen() {
           {/* ── Action buttons (role-based) ───────────────────────────── */}
           <View style={styles.buttonRow}>
             {/* Apply Now — workers only */}
-            {true && (
+            {isWorker && (
               // <TouchableOpacity
               //   style={styles.btnApply}
               //   onPress={() => handleApply(job._id)}

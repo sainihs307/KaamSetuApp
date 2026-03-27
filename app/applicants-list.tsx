@@ -22,8 +22,12 @@ const API_URL = "http://172.27.16.252:8030";
 
 type ApplicationItem = {
   _id: string;
-  workerId: string;
+  workerId?: string | null;
+  workerName?: string;
+  workerPhone?: string;
+  skills?: string[];
   status?: string;
+  source?: "direct" | "referral";
 };
 
 type ReferralItem = {
@@ -168,21 +172,47 @@ export default function ApplicationListScreen() {
 
     if (item.type === "application") {
       const app = item.data;
+      const canOpenProfile = !!app.workerId;
 
       return (
         <TouchableOpacity
           style={styles.card}
-          onPress={() =>
+          disabled={!canOpenProfile}
+          onPress={() => {
+            if (!app.workerId) return;
             router.push(
               `/worker-profile?workerId=${app.workerId}&jobId=${jobId}&applicationId=${app._id}`,
-            )
-          }
+            );
+          }}
         >
-          <Text style={styles.cardTitle}>Worker ID: {app.workerId}</Text>
+          <Text style={styles.cardTitle}>
+            {app.workerName ||
+              (app.workerId ? `Worker ID: ${app.workerId}` : "Worker")}
+          </Text>
+
+          {app.workerPhone ? (
+            <Text style={styles.cardSubtitle}>Phone: {app.workerPhone}</Text>
+          ) : null}
+
+          {app.skills && app.skills.length > 0 ? (
+            <Text style={styles.cardSubtitle}>
+              Skills: {app.skills.join(", ")}
+            </Text>
+          ) : null}
+
           <Text style={styles.cardSubtitle}>
             Status: {app.status || "pending"}
           </Text>
-          <Text style={styles.openText}>View Profile →</Text>
+
+          <Text style={styles.cardSubtitle}>
+            Type: {app.source === "referral" ? "Referred" : "Applied"}
+          </Text>
+
+          {canOpenProfile ? (
+            <Text style={styles.openText}>View Profile →</Text>
+          ) : (
+            <Text style={styles.metaText}>Profile not available</Text>
+          )}
         </TouchableOpacity>
       );
     }
