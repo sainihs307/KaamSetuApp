@@ -11,7 +11,11 @@ const jobSchema = new mongoose.Schema(
     noBudget: { type: Boolean, default: false },
     startDate: { type: Date, required: true },
     endDate: { type: Date },
-    status: { type: String, default: "pending" },
+    status: {
+      type: String,
+      enum: ["pending", "in-progress", "completed"],
+      default: "pending",
+    },
   },
   { timestamps: true },
 );

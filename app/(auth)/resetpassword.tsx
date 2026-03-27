@@ -3,12 +3,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import { useRef, useState } from "react";
 import {
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import Popup from "../../components/Popup";
 
 export default function ResetPassword() {
   const { phone } = useLocalSearchParams();
@@ -23,6 +24,7 @@ export default function ResetPassword() {
   const [error, setError] = useState("");
 
   const inputs = useRef<(TextInput | null)[]>([]);
+  const [popup, setPopup] = useState("");
 
   // OTP change
   const handleChange = (value: string, index: number) => {
@@ -60,12 +62,12 @@ export default function ResetPassword() {
     }
 
     setError("");
-    alert("Password reset successful!");
+    setPopup("Password reset successful!");
     router.push("/login");
   };
 
   return (
-    <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={styles.container}>
+    <LinearGradient colors={["#2196F3", "#4a6cf7"]} style={styles.container}>
       <Text style={styles.logo}>KaamSetu</Text>
 
       <Text style={styles.subtitle}>
@@ -137,7 +139,7 @@ export default function ResetPassword() {
 
         {/* 🔘 BUTTON */}
         <TouchableOpacity onPress={handleSubmit}>
-          <LinearGradient colors={["#6c4ef6", "#4a6cf7"]} style={styles.button}>
+          <LinearGradient colors={["#2196F3", "#4a6cf7"]} style={styles.button}>
             <Text style={styles.buttonText}>Submit</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -146,6 +148,10 @@ export default function ResetPassword() {
           Back
         </Text>
       </View>
+      <Popup
+        message={popup}
+        onClose={() => setPopup("")}
+      />
     </LinearGradient>
   );
 }

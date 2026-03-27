@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { Base_Url,API_BASE } from "../../constants/Config";
 import {
   ActivityIndicator,
   Alert,
@@ -16,10 +18,12 @@ import {
   View,
 } from "react-native";
 
+import Popup from "../../components/Popup";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const BASE_URL = "http://172.24.209.42:8000/api"; // ← same IP as login.tsx
+const BASE_URL = API_BASE; // ← same IP as login.tsx
 
 const PURPLE = "#2196F3";
 const LIGHT_PURPLE = "#F3E5F5";
@@ -27,95 +31,63 @@ const CARD_BG = "#F1F8E9";
 const TEXT_DARK = "#212121";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FILTER OPTIONS  (matches Figure 8 in design doc)
+// FILTER OPTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 const CATEGORIES = [
   "All",
-  "Plumbing",
-  "Cooking",
   "Cleaning",
-  "Gardening",
+  "Cooking",
+  "Plumbing",
   "Electrician",
-  "Maid",
+  "Babysitting",
+  "Laundry",
+  "Gardening",
+  "Driver",
+  "Carpenter",
+  "Painter",
+  "Other",
 ];
 
-const PAY_RANGES = ["All", "₹100–₹300", "₹300–₹500", "₹500–₹1000", "₹1000+"];
+const PAY_RANGES = [
+  "All",
+  "Under ₹100",
+  "₹100–₹300",
+  "₹300–₹500",
+  "₹500–₹800",
+  "₹800–₹1200",
+  "₹1200–₹2000",
+  "₹2000+",
+];
 
-const SCHEDULES = ["Any", "Current", "Within 1 hr", "Within 5 hrs", "Tomorrow"];
+const SCHEDULES = [
+  "Any",
+  "Immediate",
+  "Within 1 hr",
+  "Within 2 hrs",
+  "Within 5 hrs",
+  "Today",
+  "Tomorrow",
+  "Within 3 Days",
+  "Next Week",
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CATEGORY → ICON MAP  (Ionicons names)
+// CATEGORY → ICON MAP
 // ─────────────────────────────────────────────────────────────────────────────
 const CATEGORY_ICONS: Record<string, string> = {
-  Plumbing: "water-outline",
-  Cooking: "restaurant-outline",
   Cleaning: "sparkles-outline",
-  Gardening: "leaf-outline",
+  Cooking: "restaurant-outline",
+  Plumbing: "water-outline",
   Electrician: "flash-outline",
-  Maid: "home-outline",
+  Babysitting: "people-outline",
+  Laundry: "shirt-outline",
+  Gardening: "leaf-outline",
+  Driver: "car-outline",
+  Carpenter: "hammer-outline",
+  Painter: "color-palette-outline",
+  Other: "grid-outline",
   default: "briefcase-outline",
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DUMMY DATA — shown while backend /api/jobs isn't ready yet
-// Replace with real API response once backend route is added
-// ─────────────────────────────────────────────────────────────────────────────
-const DUMMY_JOBS = [
-  {
-    _id: "1",
-    postedBy: { name: "Rahul S." },
-    category: "Cooking",
-    budgetMin: 300,
-    budgetMax: 500,
-    isNegotiable: false,
-    schedule: "Today, Morning",
-    address: "Block C, IIT Kanpur, Kalyanpur",
-    rating: 4.5,
-    description:
-      "Need a reliable cook to prepare lunch daily. Must know North Indian cuisine. Family of four.",
-    status: "open",
-  },
-  {
-    _id: "2",
-    postedBy: { name: "Priya M." },
-    category: "Cooking",
-    budgetMin: 150,
-    budgetMax: 250,
-    isNegotiable: false,
-    schedule: "Tomorrow, Evening",
-    address: "Apartment 102, Main St, Kalyanpur",
-    rating: 4.2,
-    description: "Need someone to cook dinner for 2 people. Vegetarian only.",
-    status: "open",
-  },
-  {
-    _id: "3",
-    postedBy: { name: "Suresh K." },
-    category: "Maid",
-    budgetMin: 0,
-    budgetMax: 0,
-    isNegotiable: true,
-    schedule: "Sat, Afternoon",
-    address: "House 45, Green Avenue, Kalyanpur",
-    rating: 3.8,
-    description: "Need a maid for house cleaning on weekends. 4 hours per day.",
-    status: "open",
-  },
-  {
-    _id: "4",
-    postedBy: { name: "Anita L." },
-    category: "Electrician",
-    budgetMin: 500,
-    budgetMax: 800,
-    isNegotiable: false,
-    schedule: "Sun, Morning",
-    address: "Shop 5, Market Area, IIT Kanpur",
-    rating: 4.7,
-    description:
-      "Electrical wiring issue in a commercial space. Must have 2+ years experience.",
-    status: "open",
-  },
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -136,18 +108,30 @@ type Job = {
 
 type FilterKey = "category" | "pay" | "schedule";
 
+type AppliedApplicationMap = Record<
+  string,
+  {
+    applicationId: string;
+    workerId?: string;
+  }
+>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function LiveJobsScreen() {
+  const router = useRouter();
+
   // ── Core state ──────────────────────────────────────────────────────────────
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [isWorker, setIsWorker] = useState(false); // controls "Apply Now" visibility
+  const [isWorker, setIsWorker] = useState(false);
 
   const [appliedJobs, setAppliedJobs] = useState<string[]>([]);
+  const [appliedApplications, setAppliedApplications] =
+    useState<AppliedApplicationMap>({});
 
   const [applyModal, setApplyModal] = useState(false);
   const [applyJobId, setApplyJobId] = useState<string | null>(null);
@@ -155,6 +139,9 @@ export default function LiveJobsScreen() {
   const [expectedPay, setExpectedPay] = useState("");
   const [preferredTime, setPreferredTime] = useState("");
   const [remarks, setRemarks] = useState("");
+
+  const [popup, setPopup] = useState("");
+  const [popupType, setPopupType] = useState<"normal" | "error">("normal");
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState({
@@ -177,9 +164,6 @@ export default function LiveJobsScreen() {
 
   // ─────────────────────────────────────────────────────────────────────────
   // LOAD USER from AsyncStorage → check if worker
-  // A user is a "worker" if:
-  //   • their role === 'worker'  (from earlier auth setup)
-  //   • OR they have workerTags (from design doc)
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const loadUser = async () => {
@@ -208,9 +192,18 @@ export default function LiveJobsScreen() {
     loadAppliedJobs();
   }, []);
 
+  useEffect(() => {
+    const loadAppliedApplications = async () => {
+      const stored = await AsyncStorage.getItem("appliedApplications");
+      if (stored) {
+        setAppliedApplications(JSON.parse(stored));
+      }
+    };
+    loadAppliedApplications();
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────
   // FETCH JOBS from backend
-  // Falls back to DUMMY_JOBS if server is unreachable
   // ─────────────────────────────────────────────────────────────────────────
   const fetchJobs = useCallback(async () => {
     try {
@@ -225,28 +218,21 @@ export default function LiveJobsScreen() {
 
       const data = await res.json();
 
-      console.log("API RESPONSE:", data); // 🔥 DEBUG
+      console.log("API RESPONSE:", data);
 
       if (res.ok) {
-        // ✅ STRICT handling
         if (Array.isArray(data)) {
           const formatted = data.map((job) => ({
             ...job,
-
-            // ✅ FIX BUDGET
             budgetMin: job.minBudget,
             budgetMax: job.maxBudget,
             isNegotiable: job.noBudget,
-
-            // ✅ FIX SCHEDULE
             schedule: new Date(job.startDate).toLocaleString("en-IN", {
               day: "numeric",
               month: "short",
               hour: "numeric",
               minute: "2-digit",
             }),
-
-            // ✅ TEMP FIELDS
             postedBy: { name: "User" },
             rating: 4,
           }));
@@ -276,11 +262,14 @@ export default function LiveJobsScreen() {
   // FILTER LOGIC
   // ─────────────────────────────────────────────────────────────────────────
   const filteredJobs = jobs.filter((job) => {
+    // ── Hide completed / cancelled jobs ──────────────────────────────────────
+    const s = (job.status || "").trim().toLowerCase();
+    if (s === "completed" || s === "cancelled") return false;
+
     // Category
     if (filters.category !== "All" && job.category !== filters.category)
       return false;
 
-    // Pay range
     if (filters.pay !== "All") {
       const max = job.isNegotiable ? 9999 : job.budgetMax;
       if (filters.pay === "₹100–₹300" && max > 300) return false;
@@ -290,7 +279,7 @@ export default function LiveJobsScreen() {
       if (filters.pay === "₹1000+" && max < 1000) return false;
     }
 
-    // Schedule (simple string match)
+    // Schedule
     if (
       filters.schedule !== "Any" &&
       !job.schedule.toLowerCase().includes(filters.schedule.toLowerCase())
@@ -303,55 +292,27 @@ export default function LiveJobsScreen() {
   // ─────────────────────────────────────────────────────────────────────────
   // APPLY TO JOB
   // ─────────────────────────────────────────────────────────────────────────
-  // const handleApply = (jobId: string) => {
-  //   Alert.alert("Apply for Job", "Submit your application for this job?", [
-  //     { text: "Cancel", style: "cancel" },
-  //     {
-  //       text: "Apply Now",
-  //       onPress: async () => {
-  //         try {
-  //           const res = await fetch(`${BASE_URL}/jobs/${jobId}/apply`, {
-  //             method: "POST",
-  //             headers: {
-  //               Authorization: `Bearer ${token}`,
-  //               "Content-Type": "application/json",
-  //             },
-  //           });
-  //           const data = await res.json();
-  //           if (res.ok) {
-  //             Alert.alert(
-  //               "✅ Applied!",
-  //               "Application submitted. Check your Account page to track it."
-  //             );
-  //           } else {
-  //             Alert.alert("Error", data.message || "Could not apply");
-  //           }
-  //         } catch {
-  //           Alert.alert(
-  //             "✅ Applied!",
-  //             "Application submitted. (Demo mode — backend not connected)"
-  //           );
-  //         }
-  //       },
-  //     },
-  //   ]);
-  // };
-
   const handleApply = async (jobId: string) => {
-    // 🔁 IF ALREADY APPLIED → ASK TO CANCEL
     if (appliedJobs.includes(jobId)) {
       const updated = appliedJobs.filter((id) => id !== jobId);
 
       setAppliedJobs(updated);
-
       await AsyncStorage.setItem("appliedJobs", JSON.stringify(updated));
 
-      Alert.alert("Cancelled", "Application removed");
+      const updatedApplications = { ...appliedApplications };
+      delete updatedApplications[jobId];
+      setAppliedApplications(updatedApplications);
+      await AsyncStorage.setItem(
+        "appliedApplications",
+        JSON.stringify(updatedApplications),
+      );
+      setPopup("Application removed");
+      setPopupType("normal");
 
+      Alert.alert("Cancelled", "Application removed");
       return;
     }
 
-    // 🟢 NOT APPLIED → ASK TO APPLY
     Alert.alert("Apply for Job", "Are you sure you want to apply?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -377,72 +338,138 @@ export default function LiveJobsScreen() {
                 JSON.stringify(updated),
               );
 
-              Alert.alert("✅ Applied!", "Application submitted");
+              setPopup("Application submitted");
+              setPopupType("normal");
             } else {
-              Alert.alert("Error", data.message);
+              setPopup(data.message || "Something went wrong");
+              setPopupType("error");
             }
           } catch {
-            // fallback
             const updated = [...appliedJobs, jobId];
             setAppliedJobs(updated);
 
             await AsyncStorage.setItem("appliedJobs", JSON.stringify(updated));
 
-            Alert.alert("✅ Applied!", "Saved locally");
+            setPopup("Saved locally");
+            setPopupType("normal");
           }
         },
       },
     ]);
   };
 
+  const handleOpenChat = async (jobId: string) => {
+    try {
+      const t = await AsyncStorage.getItem("token");
+      const u = await AsyncStorage.getItem("user");
+
+      if (!t || !u) {
+        Alert.alert("Error", "Please login again");
+        return;
+      }
+
+      const parsedUser = JSON.parse(u);
+      const workerId = parsedUser?._id || parsedUser?.id;
+
+      const savedApp = appliedApplications[jobId];
+
+      if (!workerId || !savedApp?.applicationId) {
+        Alert.alert("Error", "Application details not found yet");
+        return;
+      }
+
+      const res = await fetch(`${BASE_URL}/chat/create`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${t}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId,
+          workerId,
+          applicationId: savedApp.applicationId,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.chat?._id) {
+        router.push(`/job-chat?chatId=${data.chat._id}`);
+      } else {
+        Alert.alert("Error", data.message || "Could not open chat");
+      }
+    } catch (error) {
+      console.log("Chat open error:", error);
+      Alert.alert("Error", "Something went wrong");
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
   // SUBMIT REFERRAL
   // ─────────────────────────────────────────────────────────────────────────
+  const closeReferModal = () => {
+    setReferModal(false);
+    setReferJobId(null);
+    setReferName("");
+    setReferPhone("");
+    setReferSkills("");
+  };
+
   const handleReferSubmit = async () => {
-    if (!referName.trim())
-      return Alert.alert("Error", "Please enter the worker's name");
-    if (referPhone.length !== 10)
-      return Alert.alert("Error", "Phone number must be exactly 10 digits");
-    if (!referSkills.trim())
-      return Alert.alert("Error", "Please describe the worker's skills");
+    if (!referName.trim()) {
+    setPopup("Please enter the worker's name");
+    setPopupType("error");
+    return;
+  }
+
+  if (referPhone.length !== 10) {
+    setPopup("Phone number must be exactly 10 digits");
+    setPopupType("error");
+    return;
+  }
+
+  if (!referSkills.trim()) {
+    setPopup("Please describe the worker's skills");
+    setPopupType("error");
+    return;
+  }
 
     setReferLoading(true);
+
     try {
-      const res = await fetch(`${BASE_URL}/jobs/${referJobId}/refer`, {
+      const res = await fetch(`${BASE_URL}/referral/add`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          referredWorkerName: referName,
-          referredWorkerPhone: referPhone,
-          description: referSkills,
+          workerName: referName,
+          workerPhone: referPhone,
+          skills: referSkills.split(",").map((s) => s.trim()),
+          jobId: referJobId,
         }),
       });
-      // Success regardless (backend may not have this route yet)
-      Alert.alert(
-        "✅ Referral Sent!",
-        "Your referral was submitted successfully.",
-      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setPopup(data.message || "Failed to add referral");
+        setPopupType("error");
+        return;
+      }
+
+      setPopup("Worker added to your referrals");
+      setPopupType("normal");
+
       closeReferModal();
-    } catch {
-      Alert.alert(
-        "✅ Referral Sent!",
-        "Your referral was submitted. (Demo mode)",
-      );
-      closeReferModal();
+    } catch (error) {
+      console.log("Referral error:", error);
+      setPopup("Something went wrong");
+      setPopupType("error");
     } finally {
       setReferLoading(false);
     }
-  };
-
-  const closeReferModal = () => {
-    setReferModal(false);
-    setReferName("");
-    setReferPhone("");
-    setReferSkills("");
-    setReferJobId(null);
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -475,7 +502,6 @@ export default function LiveJobsScreen() {
           />
         </TouchableOpacity>
 
-        {/* Dropdown list — renders below the pill */}
         {isOpen && (
           <View style={styles.dropdownMenu}>
             {options.map((opt) => (
@@ -507,7 +533,7 @@ export default function LiveJobsScreen() {
   };
 
   // ─────────────────────────────────────────────────────────────────────────
-  // RENDER: Single Job Card  (Figure 7, 8, 9 in design doc)
+  // RENDER: Single Job Card
   // ─────────────────────────────────────────────────────────────────────────
   const renderJobCard = ({ item: job }: { item: Job }) => {
     const isExpanded = expandedJobId === job._id;
@@ -519,7 +545,6 @@ export default function LiveJobsScreen() {
 
     return (
       <View style={styles.card}>
-        {/* ── Purple header ─────────────────────────────────────────────── */}
         <View style={styles.cardHeader}>
           <Ionicons
             name={iconName}
@@ -534,12 +559,9 @@ export default function LiveJobsScreen() {
           </Text>
         </View>
 
-        {/* ── Cream body ────────────────────────────────────────────────── */}
         <View style={styles.cardBody}>
-          {/* EXPANDED STATE: rating + description (Figure 9) */}
           {isExpanded && (
             <View style={styles.expandedSection}>
-              {/* Star rating */}
               <View style={styles.ratingRow}>
                 <Text style={styles.ratingLabel}>User Rating: </Text>
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -559,14 +581,12 @@ export default function LiveJobsScreen() {
                 <Text style={styles.ratingScore}> ({job.rating}/5)</Text>
               </View>
 
-              {/* Description */}
               <Text style={styles.descText}>{job.description}</Text>
 
               <View style={styles.divider} />
             </View>
           )}
 
-          {/* Budget */}
           <Text style={styles.infoText}>
             <Text style={styles.infoLabel}>Budget: </Text>
             {budgetText}
@@ -575,16 +595,14 @@ export default function LiveJobsScreen() {
             {job.schedule}
           </Text>
 
-          {/* Address */}
           <Text style={styles.infoText}>
             <Text style={styles.infoLabel}>Address: </Text>
             {job.address}
           </Text>
 
-          {/* ── Action buttons (role-based) ───────────────────────────── */}
           <View style={styles.buttonRow}>
             {/* Apply Now — workers only */}
-            {true && (
+            {isWorker && (
               // <TouchableOpacity
               //   style={styles.btnApply}
               //   onPress={() => handleApply(job._id)}
@@ -609,7 +627,17 @@ export default function LiveJobsScreen() {
                       JSON.stringify(updated),
                     );
 
+                    const updatedApplications = { ...appliedApplications };
+                    delete updatedApplications[job._id];
+                    setAppliedApplications(updatedApplications);
+                    await AsyncStorage.setItem(
+                      "appliedApplications",
+                      JSON.stringify(updatedApplications),
+                    );
+
                     Alert.alert("Cancelled", "Application removed");
+                    setPopup("Application removed");
+                    setPopupType("normal");
                     return;
                   }
 
@@ -623,7 +651,16 @@ export default function LiveJobsScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Refer — everyone */}
+            {isWorker && appliedJobs.includes(job._id) && (
+              <TouchableOpacity
+                style={styles.btnChat}
+                onPress={() => handleOpenChat(job._id)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.btnText}>Chat</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.btnRefer}
               onPress={() => {
@@ -635,7 +672,6 @@ export default function LiveJobsScreen() {
               <Text style={styles.btnText}>Refer</Text>
             </TouchableOpacity>
 
-            {/* View / Close — everyone */}
             <TouchableOpacity
               style={[styles.btnView, isExpanded && styles.btnViewActive]}
               onPress={() => setExpandedJobId(isExpanded ? null : job._id)}
@@ -668,19 +704,6 @@ export default function LiveJobsScreen() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
-      {/* ── Top header ────────────────────────────────────────────────── */}
-      {/* <View style={styles.header}>
-        <Text style={styles.headerTitle}>Live Jobs</Text>
-        <TouchableOpacity
-          onPress={() => {
-            setLoading(true);
-            fetchJobs();
-          }}
-        >
-          <Ionicons name="refresh-outline" size={22} color={PURPLE} />
-        </TouchableOpacity>
-      </View> */}
-
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Live Jobs</Text>
 
@@ -695,21 +718,18 @@ export default function LiveJobsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* ── Filter bar (3 pills) ───────────────────────────────────────── */}
       <View style={styles.filterBar}>
         {renderFilterPill("Category", "category", CATEGORIES, filters.category)}
         {renderFilterPill("Pay", "pay", PAY_RANGES, filters.pay)}
         {renderFilterPill("Schedule", "schedule", SCHEDULES, filters.schedule)}
       </View>
 
-      {/* ── Job list ──────────────────────────────────────────────────── */}
       <FlatList
         data={filteredJobs}
         keyExtractor={(item) => item._id}
         renderItem={renderJobCard}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        // Pull-to-refresh
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -721,7 +741,6 @@ export default function LiveJobsScreen() {
             tintColor={PURPLE}
           />
         }
-        // Empty state
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Ionicons name="search-outline" size={52} color="#BDBDBD" />
@@ -737,7 +756,6 @@ export default function LiveJobsScreen() {
         }
       />
 
-      {/* ── Refer a Worker — bottom sheet modal (Figure 10) ───────────── */}
       <Modal
         visible={referModal}
         animationType="slide"
@@ -746,7 +764,6 @@ export default function LiveJobsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            {/* Modal header */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalHeaderText}>Refer a Worker</Text>
               <TouchableOpacity onPress={closeReferModal}>
@@ -754,7 +771,6 @@ export default function LiveJobsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Modal body */}
             <ScrollView
               style={styles.modalBody}
               keyboardShouldPersistTaps="handled"
@@ -805,7 +821,6 @@ export default function LiveJobsScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* Extra bottom padding so content isn't hidden by keyboard */}
               <View style={{ height: 30 }} />
             </ScrollView>
           </View>
@@ -829,7 +844,6 @@ export default function LiveJobsScreen() {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              {/* Expected Pay */}
               <Text style={styles.inputLabel}>Expected Pay</Text>
 
               <TextInput
@@ -840,7 +854,6 @@ export default function LiveJobsScreen() {
                 keyboardType="numeric"
               />
 
-              {/* Preferred Time */}
               <Text style={styles.inputLabel}>Preferred Time</Text>
 
               <TextInput
@@ -851,7 +864,6 @@ export default function LiveJobsScreen() {
                 onChangeText={setPreferredTime}
               />
 
-              {/* Remarks */}
               <Text style={styles.inputLabel}>Other Remarks (optional)</Text>
 
               <TextInput
@@ -863,24 +875,23 @@ export default function LiveJobsScreen() {
                 onChangeText={setRemarks}
               />
 
-              {/* Submit */}
               <TouchableOpacity
                 style={styles.submitBtn}
                 onPress={async () => {
                   if (!applyJobId) return;
 
-                  // ✅ validation
                   if (!expectedPay.trim()) {
-                    Alert.alert("Error", "Expected pay is required");
+                    setPopup("Expected pay is required");
+                    setPopupType("error");
                     return;
                   }
 
                   if (!preferredTime.trim()) {
-                    Alert.alert("Error", "Preferred time is required");
+                    setPopup("Preferred time is required");
+                    setPopupType("error");
                     return;
                   }
 
-                  // ✅ already applied → cancel
                   if (appliedJobs.includes(applyJobId)) {
                     const updated = appliedJobs.filter(
                       (id) => id !== applyJobId,
@@ -893,14 +904,22 @@ export default function LiveJobsScreen() {
                       JSON.stringify(updated),
                     );
 
+                    const updatedApplications = { ...appliedApplications };
+                    delete updatedApplications[applyJobId];
+                    setAppliedApplications(updatedApplications);
+                    await AsyncStorage.setItem(
+                      "appliedApplications",
+                      JSON.stringify(updatedApplications),
+                    );
+
                     setApplyModal(false);
 
-                    Alert.alert("Cancelled", "Application removed");
+                    setPopup("Application removed");
+                    setPopupType("normal");
 
                     return;
                   }
 
-                  // ✅ apply
                   try {
                     const res = await fetch(`${BASE_URL}/applications/apply`, {
                       method: "POST",
@@ -919,7 +938,7 @@ export default function LiveJobsScreen() {
                     const data = await res.json();
 
                     if (res.ok) {
-                      const updated = [...appliedJobs, applyJobId!];
+                      const updated = [...appliedJobs, applyJobId];
                       setAppliedJobs(updated);
 
                       await AsyncStorage.setItem(
@@ -927,18 +946,42 @@ export default function LiveJobsScreen() {
                         JSON.stringify(updated),
                       );
 
-                      setApplyModal(false);
+                      const applicationId =
+                        data?.application?._id ||
+                        data?._id ||
+                        data?.applicationId ||
+                        "";
 
-                      Alert.alert(
-                        "✅ Applied",
-                        "Application submitted successfully",
+                      const updatedApplications = {
+                        ...appliedApplications,
+                        [applyJobId]: {
+                          applicationId,
+                          workerId: data?.application?.workerId || undefined,
+                        },
+                      };
+
+                      setAppliedApplications(updatedApplications);
+
+                      await AsyncStorage.setItem(
+                        "appliedApplications",
+                        JSON.stringify(updatedApplications),
                       );
+
+                      setApplyModal(false);
+                      setExpectedPay("");
+                      setPreferredTime("");
+                      setRemarks("");
+
+                      setPopup("Application submitted successfully");
+                      setPopupType("normal");
                     } else {
-                      Alert.alert("Error", data.message || "Failed to apply");
+                      setPopup(data.message || "Failed to apply");
+                      setPopupType("error");
                     }
                   } catch (err) {
                     console.log(err);
-                    Alert.alert("Error", "Something went wrong");
+                    setPopup("Something went wrong");
+                    setPopupType("error");
                   }
                 }}
               >
@@ -950,6 +993,15 @@ export default function LiveJobsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Popup
+        message={popup}
+        type={popupType}
+        onClose={() => {
+          setPopup("");
+          setPopupType("normal");
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -957,9 +1009,7 @@ export default function LiveJobsScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 // STYLES
 // ─────────────────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
-  // ── Layout ─────────────────────────────────────────────────────────────────
   container: { flex: 1, backgroundColor: "#f5f3ff" },
   loadingContainer: {
     flex: 1,
@@ -969,22 +1019,6 @@ const styles = StyleSheet.create({
   },
   loadingText: { color: "#2196F3", marginTop: 12, fontSize: 15 },
   listContent: { padding: 12, paddingBottom: 30 },
-
-  //── Header ─────────────────────────────────────────────────────────────────
-  // header: {
-  //   flexDirection: "row",
-  //   justifyContent: "space-between",
-  //   alignItems: "center",
-  //   paddingHorizontal: 16,
-  //   paddingTop: 10,
-  //   paddingBottom: 8,
-  //   backgroundColor: "#f5f3ff",
-  // },
-  // headerTitle: {
-  //   fontSize: 22,
-  //   fontWeight: "bold",
-  //   color: "#2196F3",
-  // },
 
   header: {
     backgroundColor: "#2196F3",
@@ -1005,16 +1039,6 @@ const styles = StyleSheet.create({
     top: 14,
   },
 
-  // ── Filter bar ─────────────────────────────────────────────────────────────
-  // filterBar: {
-  //   flexDirection: "row",
-  //   paddingHorizontal: 12,
-  //   paddingBottom: 10,
-  //   backgroundColor: "#f5f3ff",
-  //   gap: 8,
-  //   zIndex: 100,
-  // },
-
   filterBar: {
     flexDirection: "row",
     paddingHorizontal: 12,
@@ -1022,8 +1046,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f3ff",
     gap: 8,
     zIndex: 100,
-
-    marginTop: 6, // ✅ add this
+    marginTop: 6,
   },
   filterPillWrapper: {
     flex: 1,
@@ -1051,7 +1074,6 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
 
-  // ── Dropdown ───────────────────────────────────────────────────────────────
   dropdownMenu: {
     position: "absolute",
     top: 36,
@@ -1084,7 +1106,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ── Job card ───────────────────────────────────────────────────────────────
   card: {
     borderRadius: 12,
     marginBottom: 12,
@@ -1124,7 +1145,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ── Expanded view section ──────────────────────────────────────────────────
   expandedSection: {
     marginBottom: 10,
   },
@@ -1155,7 +1175,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // ── Action buttons ─────────────────────────────────────────────────────────
   buttonRow: {
     flexDirection: "row",
     marginTop: 10,
@@ -1187,6 +1206,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#2196F3",
     opacity: 1,
   },
+  btnChat: {
+    backgroundColor: "#4CAF50",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
   btnText: {
     color: "#ffffff",
     fontSize: 12,
@@ -1197,7 +1222,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#4CAF50",
   },
 
-  // ── Empty state ────────────────────────────────────────────────────────────
   emptyContainer: {
     alignItems: "center",
     marginTop: 70,
@@ -1217,7 +1241,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  // ── Refer modal ────────────────────────────────────────────────────────────
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",

@@ -1,30 +1,27 @@
 import bcrypt from "bcrypt";
 import express from "express";
+import fs from "fs";
 import jwt from "jsonwebtoken";
-import nodemailer from "nodemailer";
-import User from "../models/User.js";
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
+import path from "path";
+import User from "../models/User.js";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// ─── Disk Storage Setup ──────────────────────────────────────────────────────
 
-console.log("API KEY:", process.env.CLOUDINARY_API_KEY);
+const uploadDir = "uploads/profile_images";
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "profile_images",
-    allowed_formats: ["jpg", "png", "jpeg"],
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
   },
 });
 
 const upload = multer({ storage });
 
+// ─────────────────────────────────────────────────────────────────────────────
 
 const router = express.Router();
 
@@ -32,44 +29,54 @@ let otpStore = {};
 
 // ================= SEND OTP =================
 router.post("/send-otp", async (req, res) => {
-  const { email } = req.body;
+  try {
+    const { email } = req.body;
 
-  const otp = Math.floor(1000 + Math.random() * 9000).toString();
-  otpStore[email] = otp;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ message: "Invalid email" });
+    }
 
-  console.log("OTP:", otp);
+    // 🔐 generate OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+    // 🧠 store OTP in backend (IMPORTANT for verification)
+    otpStore[email] = otp;
 
-  await transporter.sendMail({
-    from: process.env.EMAIL,
-    to: email,
-    subject: "Your OTP",
-    text: `Your OTP is ${otp}`,
-  });
+    console.log("OTP:", otp); // debug
 
-  res.json({ message: "OTP sent" });
+    // 🚀 SEND TO YOUR PC (relay server)
+    const relayRes = await fetch("http://172.23.37.47:3000/send-otp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // optional:
+        // "Authorization": "Bearer mysecretkey"
+      },
+      body: JSON.stringify({ email, otp }),
+    });
+
+    if (!relayRes.ok) {
+      throw new Error("Relay failed");
+    }
+
+    res.json({ message: "OTP sent" });
+  } catch (err) {
+    console.error("OTP error:", err);
+    res.status(500).json({ message: "Failed to send OTP" });
+  }
 });
-
 // ================= REGISTER =================
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, phone, password, address, skills, otp } = req.body;
+    const { name, email, phone, password, address, skills, role, otp } =
+      req.body;
 
     const existingUser = await User.findOne({
       $or: [{ email }, { phone }],
     });
 
     if (existingUser) {
-      return res.status(400).json({
-        message: "User already exists",
-      });
+      return res.status(400).json({ message: "User already exists" });
     }
 
     if (otpStore[email] !== otp) {
@@ -78,14 +85,26 @@ router.post("/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 🔥 Normalize skills
+    let parsedSkills = [];
+    if (Array.isArray(skills)) {
+      parsedSkills = skills;
+    } else if (typeof skills === "string") {
+      parsedSkills = skills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
     const newUser = new User({
       name,
       email,
       phone,
       password: hashedPassword,
       address,
-      skills,
-      profileImage : "https://res.cloudinary.com/djs5bhgwg/image/upload/v1774383665/fad5e79954583ad50ccb3f16ee64f66d_xapp4i.jpg",
+      role: role === "worker" ? "worker" : "user",
+      skills: role === "worker" ? parsedSkills : [],
+      profileImage: `${process.env.BASE_URL}/uploads/profile_images/default.png`,
     });
 
     await newUser.save();
@@ -159,18 +178,17 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+// ================= UPDATE PROFILE =================
 router.put(
   "/update-profile",
   upload.single("profileImage"),
   async (req, res) => {
     try {
       console.log("ROUTE HIT");
-
-      // ✅ SAFE loggin
       console.log("BODY:", req.body || "No body");
       console.log("FILE:", req.file || "No file");
 
-      const { id, name, email, phone, address, skills } = req.body || {};
+      const { id, name, address, skills } = req.body || {};
 
       if (!id) {
         return res.status(400).json({ message: "Missing user ID" });
@@ -182,16 +200,29 @@ router.put(
         return res.status(404).json({ message: "User not found" });
       }
 
-      // ✅ update fields safely
       if (name) user.name = name;
-      if (email) user.email = email;
-      if (phone) user.phone = phone;
       if (address) user.address = address;
-      if (skills) user.skills = skills;
 
-      // ✅ SAFE image handling
-      if (req.file && req.file.path) {
-        user.profileImage = req.file.path;
+      // FIX: FormData sends skills as a comma string — convert to array
+      if (skills) {
+        user.skills = skills
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+
+      if (req.file) {
+        if (user.profileImage) {
+          const oldFilename = user.profileImage.split(
+            "/uploads/profile_images/",
+          )[1];
+          if (oldFilename && oldFilename !== "default.png") {
+            const oldPath = path.join(uploadDir, oldFilename);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+        }
+
+        user.profileImage = `/uploads/profile_images/${req.file.filename}`;
       }
 
       await user.save();
@@ -201,16 +232,13 @@ router.put(
         user,
       });
     } catch (err) {
-      console.log("FULL ERROR:", err); // 🔥 THIS IS KEY
+      console.log("FULL ERROR:", err);
       return res.status(500).json({
         message: "Server error",
         error: err.message,
       });
     }
-  }
+  },
 );
-
-
-
-
+// export default router;
 export default router;

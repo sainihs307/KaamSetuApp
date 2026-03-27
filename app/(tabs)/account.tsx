@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
+import { Base_Url , API_BASE} from "../../constants/Config";
 import {
   ActivityIndicator,
+  Alert,
   Image,
-  SafeAreaView,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,15 +14,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   KColors as Colors,
   Radius,
   Shadow,
   Spacing,
 } from "../../constants/kaamsetuTheme";
-import { referrals } from "../../constants/mockData";
 
-const API_URL = "http://172.24.209.42:8000";
+const API_URL = Base_Url;
 
 // ─── Reusable Components ────────────────────────────────────────────────────
 
@@ -43,22 +45,11 @@ function Avatar({
   return profileImage ? (
     <Image
       source={{ uri: profileImage }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-      }}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
     />
   ) : (
     <View
-      style={[
-        styles.avatar,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-        },
-      ]}
+      style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}
     >
       <Text style={[styles.avatarText, { fontSize: size * 0.35 }]}>
         {initials}
@@ -99,30 +90,33 @@ function SectionHeader({ title }: { title: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; bg: string; color: string }> = {
-    pending: {
-      label: "Pending",
-      bg: Colors.warningLight,
-      color: Colors.warning,
-    },
+    pending: { label: "Pending", bg: Colors.warningLight, color: Colors.warning },
     in_progress: {
       label: "Work in Progress",
       bg: Colors.successLight,
       color: Colors.success,
     },
-    completed: { label: "Completed", bg: "#E3F2FD", color: "#1565C0" },
-    cancelled: {
-      label: "Cancelled",
-      bg: Colors.errorLight,
-      color: Colors.error,
+    "in-progress": {
+      label: "Work in Progress",
+      bg: Colors.successLight,
+      color: Colors.success,
     },
+    completed: { label: "Completed", bg: "#E3F2FD", color: "#1565C0" },
+    cancelled: { label: "Cancelled", bg: Colors.errorLight, color: Colors.error },
+    accepted: { label: "Accepted", bg: Colors.successLight, color: Colors.success },
+    rejected: { label: "Rejected", bg: Colors.errorLight, color: Colors.error },
   };
-  const s = map[status] ?? map["pending"];
+
+  const s = map[status] ?? map.pending;
+
   return (
     <View style={[styles.badge, { backgroundColor: s.bg }]}>
       <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
     </View>
   );
 }
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 type UserType = {
   _id: string;
@@ -132,9 +126,10 @@ type UserType = {
   address?: string;
   skills?: string[];
   rating?: number;
-  averageRating?: number; // 👈 add this
-  totalRatings?: number; // 👈 add this
-  profileImage?: string; // 🔥 ADD THIS
+  averageRating?: number;
+  totalRatings?: number;
+  profileImage?: string;
+  role?: string;
 };
 
 type JobType = {
@@ -146,23 +141,64 @@ type JobType = {
   minBudget?: number;
   maxBudget?: number;
   noBudget?: boolean;
+  completedAt?: string;
 };
+
+type ApplicationType = {
+  _id: string;
+  status: string;
+  expectedPay: number;
+  createdAt: string;
+  completedAt?: string;
+  jobId?: {
+    _id: string;
+    category: string;
+    description?: string;
+    address?: string;
+  };
+};
+
+type ReferralType = {
+  _id: string;
+  workerName: string;
+  workerPhone: string;
+  skills?: string[];
+  createdAt?: string;
+  jobId?: {
+    _id: string;
+    title?: string;
+    company?: string;
+  };
+};
+
+// ─── Main Screen ────────────────────────────────────────────────────────────
 
 export default function AccountScreen() {
   const router = useRouter();
 
-  const [user, setUser] = useState<UserType | null>(null);
-  const [myRequests, setMyRequests] = useState<JobType[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [myApplications, setMyApplications] = useState<any[]>([]);
+  const [user, setUser] = useState<UserType | null>(null);
+
+  // USER (employer) state
+  const [myRequests, setMyRequests] = useState<JobType[]>([]);
+  const [myPastRequests, setMyPastRequests] = useState<JobType[]>([]);
+
+  // WORKER state
+  const [myApplications, setMyApplications] = useState<ApplicationType[]>([]);
+  const [myPastApplications, setMyPastApplications] = useState<ApplicationType[]>([]);
+  const [myReferrals, setMyReferrals] = useState<ReferralType[]>([]);
+
+  // ─── Load Data ──────────────────────────────────────────────────────────
 
   const loadAccountData = async () => {
+    setLoading(true);
     try {
       const token = await AsyncStorage.getItem("token");
       const userString = await AsyncStorage.getItem("user");
 
       if (!token || !userString) {
-        setLoading(false);
+        setUser(null);
         return;
       }
 
@@ -192,27 +228,75 @@ export default function AccountScreen() {
         },
       );
 
-      const appsRes = await fetch(
-        `${API_URL}/api/applications/my-applications`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      const appsData = await appsRes.json();
-      if (appsRes.ok) {
-        setMyApplications(appsData.applications || []);
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUser(userData.user || parsedUser);
+        await AsyncStorage.setItem("user", JSON.stringify(userData.user || parsedUser));
+      } else {
+        setUser(parsedUser);
       }
 
-      const requestsData = await requestsRes.json();
+      const headers = { Authorization: `Bearer ${token}` };
 
-      if (requestsRes.ok && Array.isArray(requestsData)) {
-        setMyRequests(requestsData);
+      if (parsedUser.role === "worker") {
+        // ── WORKER: fetch current apps + past apps + referrals + job requests ──
+        const [appsRes, pastAppsRes, referralsRes, requestsRes, pastRequestsRes] = await Promise.all([
+          fetch(`${API_URL}/api/applications/my-applications`,              { headers }),
+          fetch(`${API_URL}/api/applications/my-past-applications`,         { headers }),
+          fetch(`${API_URL}/api/referral`,                                  { headers }),
+          fetch(`${API_URL}/api/jobs/my-requests/${parsedUser._id}`,        { headers }),
+          fetch(`${API_URL}/api/jobs/my-past-requests/${parsedUser._id}`,   { headers }),
+        ]);
+
+        const appsData        = await appsRes.json();
+        const pastAppsData    = await pastAppsRes.json();
+        const referralsData   = await referralsRes.json();
+        const requestsData    = await requestsRes.json();
+        const pastRequestsData= await pastRequestsRes.json();
+
+        setMyApplications(appsRes.ok ? appsData.applications || [] : []);
+        setMyPastApplications(
+          pastAppsRes.ok ? pastAppsData.applications || [] : [],
+        );
+        setMyReferrals(
+          referralsRes.ok && Array.isArray(referralsData.referrals)
+            ? referralsData.referrals
+            : [],
+        );
+        setMyRequests(
+          requestsRes.ok && Array.isArray(requestsData) ? requestsData : []
+        );
+        setMyPastRequests(
+          pastRequestsRes.ok && Array.isArray(pastRequestsData) ? pastRequestsData : []
+        );
       } else {
-        setMyRequests([]);
+        // ── USER (employer): fetch current jobs + past jobs + referrals ──
+        const [requestsRes, pastRequestsRes, referralsRes] = await Promise.all([
+          fetch(`${API_URL}/api/jobs/my-requests/${parsedUser._id}`,      { headers }),
+          fetch(`${API_URL}/api/jobs/my-past-requests/${parsedUser._id}`, { headers }),
+          fetch(`${API_URL}/api/referral`,                                { headers }),
+        ]);
+
+        const requestsData = await requestsRes.json();
+        const pastRequestsData = await pastRequestsRes.json();
+        const referralsData    = await referralsRes.json();
+
+        setMyRequests(
+          requestsRes.ok && Array.isArray(requestsData) ? requestsData : [],
+        );
+        setMyPastRequests(
+          pastRequestsRes.ok && Array.isArray(pastRequestsData)
+            ? pastRequestsData
+            : [],
+        );
+        setMyReferrals(
+          referralsRes.ok && Array.isArray(referralsData.referrals)
+            ? referralsData.referrals
+            : []
+        );
       }
     } catch (error) {
       console.log("Account load error:", error);
-      setMyRequests([]);
     } finally {
       setLoading(false);
     }
@@ -240,11 +324,19 @@ export default function AccountScreen() {
     }, []),
   );
 
-  // if (!user) return null;
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAccountData();
+    setRefreshing(false);
+  };
 
-  useEffect(() => {
-    loadAccountData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      onRefresh();
+    }, []),
+  );
+
+  // ─── Handlers ───────────────────────────────────────────────────────────
 
   const handleLogout = async () => {
     await AsyncStorage.removeItem("token");
@@ -252,17 +344,488 @@ export default function AccountScreen() {
     router.replace("/(auth)/login");
   };
 
-  const handleUpdateProfile = () => {
-    router.push("/update-profile");
+  const handleUpdateProfile = () => router.push("/update-profile");
+  const handleOpenReferrals = () => router.push("/referrals");
+
+  const handleDeleteJob = (jobId: string) => {
+    Alert.alert(
+      "Delete Request",
+      "Are you sure you want to delete this job request? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              const response = await fetch(`${API_URL}/api/jobs/${jobId}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const data = await response.json();
+
+              if (response.ok) {
+                setMyRequests((prev) => prev.filter((j) => j._id !== jobId));
+                Alert.alert("Success", "Job deleted successfully.");
+              } else {
+                Alert.alert("Error", data.error || "Failed to delete the job.");
+              }
+            } catch {
+              Alert.alert("Error", "A network error occurred while trying to delete.");
+            }
+          },
+        },
+      ],
+    );
   };
 
-  const handleOpenApplications = () => {
-    router.push("/applications");
+  const handleCompleteJob = (jobId: string) => {
+    Alert.alert(
+      "Mark as Completed",
+      "Confirm that the work has been done and mark this job as completed?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Complete",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              const response = await fetch(`${API_URL}/api/jobs/${jobId}/complete`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              const data = await response.json();
+
+              if (response.ok) {
+                setMyRequests((prev) => prev.filter((j) => j._id !== jobId));
+                setMyPastRequests((prev) => [data.job, ...prev]);
+                Alert.alert("Success", "Job marked as completed!");
+              } else {
+                Alert.alert("Error", data.error || "Failed to complete the job.");
+              }
+            } catch {
+              Alert.alert("Error", "A network error occurred.");
+            }
+          },
+        },
+      ],
+    );
   };
 
-  const handleOpenReferrals = () => {
-    router.push("/referrals");
+  const handleWithdrawApplication = (applicationId: string) => {
+    Alert.alert(
+      "Withdraw Application",
+      "Are you sure you want to withdraw this application?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Withdraw",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              const response = await fetch(
+                `${API_URL}/api/applications/withdraw/${applicationId}`,
+                { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+              );
+              const data = await response.json();
+
+              if (response.ok) {
+                setMyApplications((prev) =>
+                  prev.filter((a) => a._id !== applicationId),
+                );
+                Alert.alert("Success", "Application withdrawn.");
+              } else {
+                Alert.alert("Error", data.message || "Failed to withdraw.");
+              }
+            } catch {
+              Alert.alert("Error", "A network error occurred.");
+            }
+          },
+        },
+      ],
+    );
   };
+
+  const handleOpenChat = async (app: ApplicationType) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const userString = await AsyncStorage.getItem("user");
+
+      if (!token || !userString) {
+        Alert.alert("Error", "Please login again.");
+        return;
+      }
+
+      const parsedUser = JSON.parse(userString);
+      const workerId = parsedUser?._id || parsedUser?.id;
+
+      if (!app?.jobId?._id || !workerId || !app?._id) {
+        Alert.alert("Error", "Missing chat details.");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/chat/create`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          jobId: app.jobId._id,
+          workerId,
+          applicationId: app._id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.chat?._id) {
+        router.push(`/job-chat?chatId=${data.chat._id}`);
+      } else {
+        Alert.alert("Error", data.message || "Could not open chat.");
+      }
+    } catch (error) {
+      console.log("Chat open error:", error);
+      Alert.alert("Error", "A network error occurred.");
+    }
+  };
+
+  const handleDeletePastApplication = (applicationId: string) => {
+    Alert.alert(
+      "Remove from History",
+      "Remove this application record from your history?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem("token");
+              const response = await fetch(
+                `${API_URL}/api/applications/delete/${applicationId}`,
+                { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+              );
+              const data = await response.json();
+
+              if (response.ok) {
+                setMyPastApplications((prev) =>
+                  prev.filter((a) => a._id !== applicationId),
+                );
+              } else {
+                Alert.alert("Error", data.message || "Failed to remove record.");
+              }
+            } catch {
+              Alert.alert("Error", "A network error occurred.");
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  // ─── Render Helpers ─────────────────────────────────────────────────────
+
+  const renderEmpty = (message: string) => (
+    <View style={styles.emptyCard}>
+      <Text style={styles.emptyText}>{message}</Text>
+    </View>
+  );
+
+  const renderLoadingSpinner = () => (
+    <View style={styles.centered}>
+      <ActivityIndicator size="large" color={Colors.primary} />
+    </View>
+  );
+
+  // ─── USER (employer) sections ────────────────────────────────────────────
+
+  const renderUserSections = () => (
+    <>
+      <SectionHeader title="My Requests" />
+      {loading ? renderLoadingSpinner() : myRequests.length === 0 ? (
+        renderEmpty("No active requests found.")
+      ) : (
+        myRequests.map((job) => (
+          <View key={job._id} style={styles.requestCard}>
+            {(job.status || "").toLowerCase() === "pending" && (
+              <TouchableOpacity
+                style={styles.topRightDeleteBtn}
+                onPress={() => handleDeleteJob(job._id)}
+              >
+                <Text style={styles.topRightDeleteIcon}>🗑️</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.requestTitle, { paddingRight: 36 }]}>
+              {job.category}
+            </Text>
+            <Text style={styles.requestSub}>{job.description}</Text>
+            <Text style={styles.requestSub}>📍 {job.address}</Text>
+            <StatusBadge status={job.status} />
+
+            {job.noBudget ? (
+              <Text style={styles.requestSub}>Budget: Not specified</Text>
+            ) : (
+              <Text style={styles.requestSub}>
+                💰 Budget: ₹{job.minBudget || 0} – ₹{job.maxBudget || 0}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.outlineBtn}
+              onPress={() => router.push(`/applications?jobId=${job._id}`)}
+            >
+              <Text style={styles.outlineBtnText}>View Applicants</Text>
+            </TouchableOpacity>
+
+            {["in_progress", "in-progress"].includes(
+              (job.status || "").toLowerCase(),
+            ) && (
+              <TouchableOpacity
+                style={styles.completeBtn}
+                onPress={() => handleCompleteJob(job._id)}
+              >
+                <Text style={styles.completeBtnText}>✅ Mark as Completed</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))
+      )}
+
+      <SectionHeader title="Past Requests" />
+      {loading ? renderLoadingSpinner() : myPastRequests.length === 0 ? (
+        renderEmpty("No past requests found.")
+      ) : (
+        myPastRequests.map((job) => (
+          <View key={job._id} style={[styles.requestCard, styles.pastCard]}>
+            <Text style={styles.requestTitle}>{job.category}</Text>
+            <Text style={styles.requestSub}>{job.description}</Text>
+            <Text style={styles.requestSub}>📍 {job.address}</Text>
+            <StatusBadge status={job.status} />
+
+            {job.noBudget ? (
+              <Text style={styles.requestSub}>Budget: Not specified</Text>
+            ) : (
+              <Text style={styles.requestSub}>
+                💰 Budget: ₹{job.minBudget || 0} – ₹{job.maxBudget || 0}
+              </Text>
+            )}
+
+            {job.completedAt && (
+              <Text style={styles.requestSub}>
+                🗓 Completed: {new Date(job.completedAt).toLocaleDateString()}
+              </Text>
+            )}
+          </View>
+        ))
+      )}
+
+      {/* ── Referred Workers ── */}
+      <SectionHeader title="Referred Workers" />
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+        </View>
+      ) : myReferrals.length === 0 ? (
+        renderEmpty("No referred workers found.")
+      ) : (
+        <TouchableOpacity style={styles.quickCard} onPress={handleOpenReferrals}>
+          <Text style={styles.quickCardTitle}>Referred Workers</Text>
+          <Text style={styles.quickCardSub}>
+            {myReferrals.length} referred worker(s) — tap to view
+          </Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  // ─── WORKER sections ─────────────────────────────────────────────────────
+
+  const renderWorkerSections = () => (
+    <>
+      {/* ── My Current Requests ── */}
+      <SectionHeader title="My Requests" />
+      {loading ? renderLoadingSpinner() : myRequests.length === 0 ? (
+        renderEmpty("No active requests found.")
+      ) : (
+        myRequests.map((job) => (
+          <View key={job._id} style={styles.requestCard}>
+            {(job.status || "").toLowerCase() === "pending" && (
+              <TouchableOpacity
+                style={styles.topRightDeleteBtn}
+                onPress={() => handleDeleteJob(job._id)}
+              >
+                <Text style={styles.topRightDeleteIcon}>🗑️</Text>
+              </TouchableOpacity>
+            )}
+
+            <Text style={[styles.requestTitle, { paddingRight: 36 }]}>
+              {job.category}
+            </Text>
+            <Text style={styles.requestSub}>{job.description}</Text>
+            <Text style={styles.requestSub}>📍 {job.address}</Text>
+            <StatusBadge status={job.status} />
+
+            {job.noBudget ? (
+              <Text style={styles.requestSub}>Budget: Not specified</Text>
+            ) : (
+              <Text style={styles.requestSub}>
+                💰 Budget: ₹{job.minBudget || 0} – ₹{job.maxBudget || 0}
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.outlineBtn}
+              onPress={() => router.push(`/applications?jobId=${job._id}`)}
+            >
+              <Text style={styles.outlineBtnText}>View Applicants</Text>
+            </TouchableOpacity>
+
+            {["in_progress", "in-progress"].includes(
+              (job.status || "").toLowerCase()
+            ) && (
+              <TouchableOpacity
+                style={styles.completeBtn}
+                onPress={() => handleCompleteJob(job._id)}
+              >
+                <Text style={styles.completeBtnText}>✅ Mark as Completed</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))
+      )}
+
+      {/* ── Past Requests ── */}
+      <SectionHeader title="Past Requests" />
+      {loading ? renderLoadingSpinner() : myPastRequests.length === 0 ? (
+        renderEmpty("No past requests found.")
+      ) : (
+        myPastRequests.map((job) => (
+          <View key={job._id} style={[styles.requestCard, styles.pastCard]}>
+            <Text style={styles.requestTitle}>{job.category}</Text>
+            <Text style={styles.requestSub}>{job.description}</Text>
+            <Text style={styles.requestSub}>📍 {job.address}</Text>
+            <StatusBadge status={job.status} />
+
+            {job.noBudget ? (
+              <Text style={styles.requestSub}>Budget: Not specified</Text>
+            ) : (
+              <Text style={styles.requestSub}>
+                💰 Budget: ₹{job.minBudget || 0} – ₹{job.maxBudget || 0}
+              </Text>
+            )}
+
+            {job.completedAt && (
+              <Text style={styles.requestSub}>
+                🗓 Completed: {new Date(job.completedAt).toLocaleDateString()}
+              </Text>
+            )}
+          </View>
+        ))
+      )}
+
+      {/* ── My Current Applications ── */}
+      <SectionHeader title="My Applications" />
+      {loading ? renderLoadingSpinner() : myApplications.length === 0 ? (
+        renderEmpty("No active applications found.")
+      ) : (
+        myApplications.map((app) => (
+          <View key={app._id} style={styles.requestCard}>
+            <Text style={styles.requestTitle}>
+              {app.jobId?.category || "Job"}
+            </Text>
+            <Text style={styles.requestSub}>{app.jobId?.description}</Text>
+            {app.jobId?.address && (
+              <Text style={styles.requestSub}>📍 {app.jobId.address}</Text>
+            )}
+            <StatusBadge status={app.status} />
+            <Text style={styles.requestSub}>💰 Expected Pay: ₹{app.expectedPay}</Text>
+            <Text style={styles.requestSub}>
+              📅 Applied: {new Date(app.createdAt).toLocaleDateString()}
+            </Text>
+
+            {app.status === "pending" ? (
+              <View style={styles.workerActionRow}>
+                <TouchableOpacity
+                  style={styles.chatBtn}
+                  onPress={() => handleOpenChat(app)}
+                >
+                  <Text style={styles.chatBtnText}>Chat</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dangerOutlineBtnCompact}
+                  onPress={() => handleWithdrawApplication(app._id)}
+                >
+                  <Text style={styles.dangerOutlineBtnText}>
+                    Withdraw
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.chatBtnSingle}
+                onPress={() => handleOpenChat(app)}
+              >
+                <Text style={styles.chatBtnText}>Chat</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ))
+      )}
+
+      <SectionHeader title="Past Applications" />
+      {loading ? renderLoadingSpinner() : myPastApplications.length === 0 ? (
+        renderEmpty("No past applications found.")
+      ) : (
+        myPastApplications.map((app) => (
+          <View key={app._id} style={[styles.requestCard, styles.pastCard]}>
+            <TouchableOpacity
+              style={styles.topRightDeleteBtn}
+              onPress={() => handleDeletePastApplication(app._id)}
+            >
+              <Text style={styles.topRightDeleteIcon}>🗑️</Text>
+            </TouchableOpacity>
+
+            <Text style={[styles.requestTitle, { paddingRight: 36 }]}>
+              {app.jobId?.category || "Job"}
+            </Text>
+            <StatusBadge status={app.status} />
+            <Text style={styles.requestSub}>💰 Expected Pay: ₹{app.expectedPay}</Text>
+            <Text style={styles.requestSub}>
+              📅 Applied: {new Date(app.createdAt).toLocaleDateString()}
+            </Text>
+            {app.completedAt && (
+              <Text style={styles.requestSub}>
+                🗓 Completed: {new Date(app.completedAt).toLocaleDateString()}
+              </Text>
+            )}
+          </View>
+        ))
+      )}
+
+      <SectionHeader title="Referred Workers" />
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="small" color={Colors.primary} />
+        </View>
+      ) : myReferrals.length === 0 ? (
+        renderEmpty("No referred workers found.")
+      ) : (
+        <TouchableOpacity style={styles.quickCard} onPress={handleOpenReferrals}>
+          <Text style={styles.quickCardTitle}>Referred Workers</Text>
+          <Text style={styles.quickCardSub}>
+            {myReferrals.length} referred worker(s) — tap to view
+          </Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -272,12 +835,19 @@ export default function AccountScreen() {
         <Text style={styles.headerTitle}>Account</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.profileCard}>
           <View style={styles.profileTop}>
             <Avatar
               name={user?.name || "User"}
-              profileImage={user?.profileImage}
+              profileImage={
+                user?.profileImage ? `${API_URL}${user.profileImage}` : undefined
+              }
               size={72}
             />
 
@@ -286,134 +856,65 @@ export default function AccountScreen() {
                 <Text style={styles.profileName}>
                   {user?.name || "Loading..."}
                 </Text>
-
-                <TouchableOpacity
-                  onPress={() => router.push("/update-profile")}
-                  style={styles.editIcon}
-                >
+                <TouchableOpacity onPress={handleUpdateProfile} style={styles.editIcon}>
                   <Text style={styles.editIconText}>✏️</Text>
                 </TouchableOpacity>
               </View>
 
               <StarRating rating={user?.averageRating || 0} />
 
-              {/* Skills */}
-              {user?.skills && user.skills.length > 0 && (
-                <View style={styles.tagsRow}>
-                  {user.skills.map((tag) => (
-                    <View key={tag} style={styles.tag}>
-                      <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                  ))}
+              {user?.role && (
+                <View
+                  style={[
+                    styles.roleBadge,
+                    {
+                      backgroundColor:
+                        user.role === "worker"
+                          ? Colors.primary + "20"
+                          : Colors.warningLight,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.roleBadgeText,
+                      {
+                        color:
+                          user.role === "worker" ? Colors.primary : Colors.warning,
+                      },
+                    ]}
+                  >
+                    {user.role === "worker" ? "👷 Worker" : "🧑‍💼 Employer"}
+                  </Text>
                 </View>
               )}
 
-              {/* Extra details (from other branch) */}
-              <Text style={styles.profileText}>
-                Email: {user?.email || "-"}
-              </Text>
-              <Text style={styles.profileText}>
-                Phone: {user?.phone || "-"}
-              </Text>
+              {user?.role === "worker" &&
+                user.skills &&
+                user.skills.length > 0 && (
+                  <View style={styles.tagsRow}>
+                    {user.skills.map((tag) => (
+                      <View key={tag} style={styles.tag}>
+                        <Text style={styles.tagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+              <Text style={styles.profileText}>Email: {user?.email || "-"}</Text>
+              <Text style={styles.profileText}>Phone: {user?.phone || "-"}</Text>
               <Text style={styles.profileText}>
                 Address: {user?.address?.trim() ? user.address : "-"}
               </Text>
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={handleUpdateProfile}
-          >
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleUpdateProfile}>
             <Text style={styles.primaryBtnText}>Update Profile</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() =>
-              router.push("/job-chat?chatId=69c39b7dcf8d1328e3f5ffd1")
-            }
-            style={styles.testChatBtn}
-          >
-            <Text style={styles.testChatBtnText}>Open Test Chat</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>My Requests (Current)</Text>
-
-        {loading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-          </View>
-        ) : myRequests.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No requests found.</Text>
-          </View>
-        ) : (
-          myRequests.map((job) => (
-            <View key={job._id} style={styles.requestCard}>
-              <Text style={styles.requestTitle}>{job.category}</Text>
-              <Text style={styles.requestSub}>{job.description}</Text>
-              <Text style={styles.requestSub}>Address: {job.address}</Text>
-              <Text style={styles.requestSub}>Status: {job.status}</Text>
-
-              {job.noBudget ? (
-                <Text style={styles.requestSub}>Budget: Not specified</Text>
-              ) : (
-                <Text style={styles.requestSub}>
-                  Budget: ₹{job.minBudget || 0} - ₹{job.maxBudget || 0}
-                </Text>
-              )}
-
-              <TouchableOpacity
-                style={styles.outlineBtn}
-                onPress={() => router.push(`/applications?jobId=${job._id}`)}
-              >
-                <Text style={styles.outlineBtnText}>View Applicants</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-
-        <Text style={styles.sectionTitle}>My Applications</Text>
-
-        <Text style={styles.sectionTitle}>My Applications</Text>
-
-        {myApplications.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No applications found.</Text>
-          </View>
-        ) : (
-          myApplications.map((app) => (
-            <View key={app._id} style={styles.requestCard}>
-              <Text style={styles.requestTitle}>{app.jobId?.category}</Text>
-              <Text style={styles.requestSub}>Status: {app.status}</Text>
-              <Text style={styles.requestSub}>
-                Expected Pay: ₹{app.expectedPay}
-              </Text>
-              <Text style={styles.requestSub}>
-                Applied: {new Date(app.createdAt).toLocaleDateString()}
-              </Text>
-            </View>
-          ))
-        )}
-
-        <Text style={styles.sectionTitle}>Referrals</Text>
-
-        {referrals.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>No referrals found.</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.quickCard}
-            onPress={handleOpenReferrals}
-          >
-            <Text style={styles.quickCardTitle}>Referrals</Text>
-            <Text style={styles.quickCardSub}>
-              {referrals.length} referral item(s) available
-            </Text>
-          </TouchableOpacity>
-        )}
+        {user?.role === "worker" ? renderWorkerSections() : renderUserSections()}
 
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutBtnText}>Logout</Text>
@@ -425,27 +926,26 @@ export default function AccountScreen() {
   );
 }
 
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+
   header: {
     backgroundColor: Colors.primary,
     alignItems: "center",
     paddingVertical: 16,
   },
-  headerTitle: {
-    color: Colors.white,
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  scrollContent: {
-    padding: Spacing.md,
-    gap: 14,
-  },
+  headerTitle: { color: Colors.white, fontSize: 22, fontWeight: "700" },
+
+  scrollContent: { padding: Spacing.md, gap: 14 },
+
   centered: {
     paddingVertical: 28,
     alignItems: "center",
     justifyContent: "center",
   },
+
   profileCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -455,35 +955,57 @@ const styles = StyleSheet.create({
     ...Shadow.md,
     gap: 12,
   },
-  profileName: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: Colors.textPrimary,
+  profileTop: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
+  profileInfo: { flex: 1, gap: 4 },
+  profileNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  profileText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  primaryBtn: {
+  profileName: { fontSize: 20, fontWeight: "800", color: Colors.textPrimary },
+  profileText: { fontSize: 14, color: Colors.textSecondary },
+  editIcon: { padding: 4 },
+  editIconText: { fontSize: 16 },
+
+  avatar: {
     backgroundColor: Colors.primary,
-    borderRadius: Radius.full,
-    paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
-  primaryBtnText: {
-    color: Colors.white,
-    fontWeight: "700",
+  avatarText: { color: Colors.white, fontWeight: "700" },
+
+  starsRow: { flexDirection: "row", alignItems: "center", marginTop: 2 },
+  ratingText: { fontSize: 13, color: Colors.textSecondary },
+
+  roleBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 4,
   },
-  testChatBtn: {
-    backgroundColor: "green",
-    paddingVertical: 12,
-    borderRadius: Radius.md,
+  roleBadgeText: { fontSize: 12, fontWeight: "700" },
+
+  tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
+  tag: {
+    backgroundColor: Colors.primary + "20",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  tagText: { fontSize: 12, color: Colors.primary, fontWeight: "600" },
+
+  sectionHeaderRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginTop: 6,
   },
-  testChatBtnText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 15,
+  sectionAccent: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: Colors.primary,
   },
   sectionTitle: {
     fontSize: 18,
@@ -491,6 +1013,89 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     marginTop: 6,
   },
+
+  badge: {
+    alignSelf: "flex-start",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  badgeText: { fontSize: 12, fontWeight: "600" },
+
+  primaryBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  primaryBtnText: { color: Colors.white, fontWeight: "700" },
+
+  logoutBtn: {
+    backgroundColor: "#D9534F",
+    borderRadius: Radius.full,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  logoutBtnText: { color: Colors.white, fontWeight: "700" },
+
+  outlineBtn: {
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  outlineBtnText: { color: Colors.primary, fontWeight: "700" },
+
+  completeBtn: {
+    backgroundColor: Colors.success,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  completeBtnText: { color: Colors.white, fontWeight: "700" },
+
+  dangerOutlineBtn: {
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 6,
+  },
+  dangerOutlineBtnCompact: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: Colors.error,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+  },
+  dangerOutlineBtnText: { color: Colors.error, fontWeight: "700" },
+
+  chatBtn: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+  },
+  chatBtnSingle: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+  },
+  chatBtnText: { color: Colors.white, fontWeight: "700" },
+
   emptyCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -498,10 +1103,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.cardBorder,
   },
-  emptyText: {
-    fontSize: 15,
-    color: Colors.textMuted,
-  },
+  emptyText: { fontSize: 15, color: Colors.textMuted },
+
   requestCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -510,28 +1113,29 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     ...Shadow.md,
     gap: 6,
+    position: "relative",
   },
-  requestTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: Colors.textPrimary,
+  pastCard: {
+    opacity: 0.85,
   },
-  requestSub: {
-    fontSize: 14,
-    color: Colors.textSecondary,
+  requestTitle: { fontSize: 17, fontWeight: "700", color: Colors.textPrimary },
+  requestSub: { fontSize: 14, color: Colors.textSecondary },
+
+  workerActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
   },
-  outlineBtn: {
-    marginTop: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: Radius.full,
-    paddingVertical: 10,
-    alignItems: "center",
+
+  topRightDeleteBtn: {
+    position: "absolute",
+    top: Spacing.md,
+    right: Spacing.md,
+    zIndex: 10,
+    padding: 4,
   },
-  outlineBtnText: {
-    color: Colors.primary,
-    fontWeight: "700",
-  },
+  topRightDeleteIcon: { fontSize: 20 },
+
   quickCard: {
     backgroundColor: Colors.cardBg,
     borderRadius: Radius.lg,
@@ -540,114 +1144,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
     ...Shadow.sm,
   },
-  quickCardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: Colors.textPrimary,
-  },
-  quickCardSub: {
-    marginTop: 6,
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  logoutBtn: {
-    backgroundColor: "#D9534F",
-    borderRadius: Radius.full,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  logoutBtnText: {
-    color: Colors.white,
-    fontWeight: "700",
-  },
-  avatar: {
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  avatarText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-
-  starsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-
-  ratingText: {
-    marginLeft: 5,
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-
-  profileTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  profileInfo: {
-    marginLeft: 12,
-    flex: 1,
-  },
-
-  profileNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  editIcon: {
-    marginLeft: 8,
-  },
-
-  editIconText: {
-    fontSize: 16,
-  },
-
-  tagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 5,
-  },
-
-  tag: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginRight: 5,
-    marginTop: 5,
-  },
-
-  tagText: {
-    color: "#fff",
-    fontSize: 12,
-  },
-
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  sectionAccent: {
-    width: 4,
-    height: 16,
-    backgroundColor: Colors.primary,
-    marginRight: 6,
-  },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-    marginTop: 6,
-  },
-
-  badgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  quickCardTitle: { fontSize: 16, fontWeight: "700", color: Colors.textPrimary },
+  quickCardSub: { marginTop: 6, fontSize: 12, color: Colors.textSecondary },
 });
