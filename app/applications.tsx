@@ -6,10 +6,12 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -22,6 +24,30 @@ import {
 
 const API_URL = "http://172.27.16.252:8030";
 
+function StarRatingInput({
+  rating,
+  onRate,
+}: {
+  rating: number;
+  onRate: (r: number) => void;
+}) {
+  return (
+    <View style={{ flexDirection: "row", gap: 6 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <TouchableOpacity key={i} onPress={() => onRate(i)}>
+          <Text
+            style={{
+              fontSize: 28,
+              color: i <= rating ? Colors.starGold : "#DDD",
+            }}
+          >
+            ★
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
 type WorkerRef =
   | string
   | {
@@ -60,7 +86,13 @@ type ListRow =
 export default function ApplicationListScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
   const router = useRouter();
-
+  const [tab, setTab] = useState<"accepted" | "pending">("accepted");
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState("");
+  const [ratingModal, setRatingModal] = useState<{ visible: boolean; appId: string }>({
+    visible: false,
+    appId: "",
+  });
   const [applications, setApplications] = useState<ApplicationItem[]>([]);
   const [referrals, setReferrals] = useState<ReferralItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,7 +358,34 @@ export default function ApplicationListScreen() {
       Alert.alert("Error", "Something went wrong");
     }
   };
+  const handleRatingSubmit = async () => {
+  const appId = ratingModal.appId;
+  const token = await AsyncStorage.getItem("token");
+  const res = await fetch(`${API_URL}/api/applications/complete/${appId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ rating, review }),
+  });
+  const data = await res.json();
+  if (res.ok) {
+    setRatingModal({ visible: false, appId: "" });
+    setRating(0);
+    setReview("");
+    Alert.alert("Thank you!", "Your rating has been submitted.");
+    fetchData();
+  } else {
+    Alert.alert("Error", data.message || "Failed to submit rating");
+  }
+};
 
+const handleSkipRating = () => {
+  setRatingModal({ visible: false, appId: "" });
+  setRating(0);
+  setReview("");
+};
   const renderItem = ({ item }: { item: ListRow }) => {
     if (item.type === "section") {
       return (
@@ -390,8 +449,7 @@ export default function ApplicationListScreen() {
                 >
                   <Text style={styles.acceptBtnText}>Accept</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
+<TouchableOpacity
                   style={styles.rejectBtn}
                   onPress={() => handleReject(app._id)}
                 >
@@ -439,7 +497,6 @@ export default function ApplicationListScreen() {
   };
 
   const keyExtractor = (item: ListRow) => item.id;
-
   const showApplicantsEmpty = applications.length === 0;
   const showReferralsEmpty = filteredReferrals.length === 0;
   const showCompletelyEmpty = showApplicantsEmpty && showReferralsEmpty;
@@ -454,6 +511,27 @@ export default function ApplicationListScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Applicants</Text>
         <View style={{ width: 36 }} />
+      </View>
+
+      {/* Tab switcher */}
+      <View style={{ flexDirection: "row", gap: 10, padding: 12 }}>
+        {(["accepted", "pending"] as const).map((t) => (
+          <TouchableOpacity
+            key={t}
+            onPress={() => setTab(t)}
+            style={{
+              flex: 1,
+              padding: 10,
+              borderRadius: 999,
+              backgroundColor: tab === t ? Colors.primary : "#F1F3F5",
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: tab === t ? "#fff" : Colors.textSecondary, fontWeight: "700" }}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {loading ? (
@@ -490,6 +568,35 @@ export default function ApplicationListScreen() {
           }
         />
       )}
+
+      {/* Rating Modal */}
+      <Modal transparent animationType="fade" visible={ratingModal.visible}>
+        <View style={styles.overlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Rate the Worker</Text>
+            <Text style={styles.modalSubtitle}>How was your experience?</Text>
+            <StarRatingInput rating={rating} onRate={setRating} />
+            <TextInput
+              style={styles.reviewInput}
+              placeholder="Write a review (optional)..."
+              placeholderTextColor="#aaa"
+              value={review}
+              onChangeText={setReview}
+              multiline
+              numberOfLines={3}
+            />
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+              <TouchableOpacity style={styles.skipBtn} onPress={handleSkipRating}>
+                <Text style={styles.skipBtnText}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitRatingBtn} onPress={handleRatingSubmit}>
+                <Text style={styles.submitRatingText}>Submit & End</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -512,6 +619,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 14,
   },
+
+  headerTitle: { color: Colors.white, fontSize: 18, fontWeight: "700" },
 
   backBtn: {
     width: 36,
@@ -583,6 +692,14 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.primary,
   },
+  detailRow: { flexDirection: "row", gap: 8 },
+  detailKey: {
+    width: 80,
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+  },
+  detailVal: { flex: 1, fontSize: 12, color: Colors.textPrimary },
 
   metaText: {
     marginTop: 8,
@@ -672,4 +789,5 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 15,
   },
+  skipBtnText: { color: Colors.textSecondary, fontWeight: "600", fontSize: 14 },
 });

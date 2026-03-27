@@ -204,9 +204,29 @@ export default function AccountScreen() {
 
       const parsedUser: UserType = JSON.parse(userString);
 
+      // Fetch fresh user data from API to get updated rating
       const userRes = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUser(userData.user || parsedUser);
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(userData.user || parsedUser),
+        );
+      } else {
+        setUser(parsedUser);
+      }
+
+      const requestsRes = await fetch(
+        `${API_URL}/api/jobs/my-requests/${parsedUser._id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
 
       if (userRes.ok) {
         const userData = await userRes.json();
@@ -281,6 +301,28 @@ export default function AccountScreen() {
       setLoading(false);
     }
   };
+  // ✅ REPLACE WITH THIS
+  useFocusEffect(
+    useCallback(() => {
+      const loadFreshUser = async () => {
+        try {
+          const token = await AsyncStorage.getItem("token");
+          if (!token) return;
+          const res = await fetch(`${API_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setUser(data.user);
+            await AsyncStorage.setItem("user", JSON.stringify(data.user));
+          }
+        } catch (err) {
+          console.log("Failed to refresh user:", err);
+        }
+      };
+      loadFreshUser();
+    }, []),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
