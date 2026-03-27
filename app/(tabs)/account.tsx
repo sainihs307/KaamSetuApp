@@ -21,8 +21,7 @@ import {
   Spacing,
 } from "../../constants/kaamsetuTheme";
 
-
-const API_URL = "http://172.23.17.67:8030";
+const API_URL = "http://172.27.16.252:8030";
 
 // ─── Reusable Components ────────────────────────────────────────────────────
 
@@ -612,11 +611,6 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.primary,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: Colors.textPrimary,
-  },
 
   badge: {
     alignSelf: "flex-start",
@@ -639,19 +633,11 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontWeight: "700",
   },
-
-
-  outlineBtn: {
-    marginTop: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    borderRadius: Radius.full,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  outlineBtnText: {
-    color: Colors.primary,
-    fontWeight: "700",
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Colors.textPrimary,
+    marginTop: 6,
   },
 
   logoutBtn: {
@@ -710,7 +696,18 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
 
-
+  outlineBtn: {
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 10, // Added margin back since we removed the row container
+  },
+  outlineBtnText: {
+    color: Colors.primary,
+    fontWeight: "700",
+  },
 
   quickCard: {
     backgroundColor: Colors.cardBg,
@@ -730,6 +727,4 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
   },
-
-
 });

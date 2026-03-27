@@ -80,7 +80,7 @@ export default function ApplicationListScreen() {
         setApplications(
           Array.isArray(applicationsData)
             ? applicationsData
-            : applicationsData.applications || []
+            : applicationsData.applications || [],
         );
       }
 
@@ -89,7 +89,9 @@ export default function ApplicationListScreen() {
         setReferrals([]);
       } else {
         setReferrals(
-          Array.isArray(referralsData?.referrals) ? referralsData.referrals : []
+          Array.isArray(referralsData?.referrals)
+            ? referralsData.referrals
+            : [],
         );
       }
     } catch (error) {
@@ -172,7 +174,7 @@ export default function ApplicationListScreen() {
           style={styles.card}
           onPress={() =>
             router.push(
-              `/worker-profile?workerId=${app.workerId}&jobId=${jobId}&applicationId=${app._id}`
+              `/worker-profile?workerId=${app.workerId}&jobId=${jobId}&applicationId=${app._id}`,
             )
           }
         >
@@ -200,7 +202,8 @@ export default function ApplicationListScreen() {
 
         {referral.createdAt ? (
           <Text style={styles.metaText}>
-            Referred on: {new Date(referral.createdAt).toLocaleDateString("en-IN")}
+            Referred on:{" "}
+            {new Date(referral.createdAt).toLocaleDateString("en-IN")}
           </Text>
         ) : null}
 
@@ -235,7 +238,9 @@ export default function ApplicationListScreen() {
         </View>
       ) : showCompletelyEmpty ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No applicants or referred workers found.</Text>
+          <Text style={styles.emptyText}>
+            No applicants or referred workers found.
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -252,7 +257,9 @@ export default function ApplicationListScreen() {
               )}
               {showReferralsEmpty && (
                 <View style={styles.emptyBlock}>
-                  <Text style={styles.emptyMiniText}>No referred workers found.</Text>
+                  <Text style={styles.emptyMiniText}>
+                    No referred workers found.
+                  </Text>
                 </View>
               )}
             </>

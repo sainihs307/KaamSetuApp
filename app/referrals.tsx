@@ -128,7 +128,7 @@ export default function ReferralsScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchReferrals();
-    }, [fetchReferrals])
+    }, [fetchReferrals]),
   );
 
   return (

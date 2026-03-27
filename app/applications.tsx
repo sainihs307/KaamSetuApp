@@ -1,24 +1,22 @@
-import { useRouter } from "expo-router";
-import { useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-    Alert,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    KColors as Colors,
-    Radius,
-    Shadow,
-    Spacing,
+  KColors as Colors,
+  Radius,
+  Shadow,
+  Spacing,
 } from "../constants/kaamsetuTheme";
 
 type TabType = "accepted" | "requested";
@@ -64,36 +62,36 @@ export default function ApplicationsScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
 
   const fetchApplications = async () => {
-  try {
-    const token = await AsyncStorage.getItem("token");
+    try {
+      const token = await AsyncStorage.getItem("token");
 
-    // If jobId is passed, fetch applicants for that specific job
-    const url = jobId
-      ? `${BASE_URL}/applications/job/${jobId}`
-      : `${BASE_URL}/applications/received`;
+      // If jobId is passed, fetch applicants for that specific job
+      const url = jobId
+        ? `${BASE_URL}/applications/job/${jobId}`
+        : `${BASE_URL}/applications/received`;
 
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    const data = await res.json();
-    setApplications(data.applications || []);
-  } catch (err) {
-    console.log("FETCH ERROR:", err);
-  }
-};
+      const data = await res.json();
+      setApplications(data.applications || []);
+    } catch (err) {
+      console.log("FETCH ERROR:", err);
+    }
+  };
 
-useEffect(() => {
-  fetchApplications();
-}, [jobId]);
+  useEffect(() => {
+    fetchApplications();
+  }, [jobId]);
 
   const acceptedApps = (applications || []).filter(
-  (a) => a.status === "accepted"
-);
+    (a) => a.status === "accepted",
+  );
 
-const requestedApps = (applications || []).filter(
-  (a) => a.status === "pending"
-);
+  const requestedApps = (applications || []).filter(
+    (a) => a.status === "pending",
+  );
 
   const handleEndWork = () => {
     Alert.alert("End Work", "Confirm that you have completed the job?", [
@@ -171,13 +169,12 @@ const requestedApps = (applications || []).filter(
 
                 {/* Job Summary */}
                 <View style={styles.section}>
-                  <Text style={styles.jobTitle}>
-  {app.jobId?.category}
-</Text>
+                  <Text style={styles.jobTitle}>{app.jobId?.category}</Text>
 
-<Text style={styles.jobMeta}>
-  Status: Accepted · {new Date(app.createdAt).toLocaleDateString()}
-</Text>
+                  <Text style={styles.jobMeta}>
+                    Status: Accepted ·{" "}
+                    {new Date(app.createdAt).toLocaleDateString()}
+                  </Text>
                 </View>
 
                 {/* Job Details */}
@@ -236,50 +233,47 @@ const requestedApps = (applications || []).filter(
           </View>
         ) : (
           requestedApps.map((app) => (
-  <View
-  key={app?._id || Math.random()}
-    style={[
-      styles.requestedCard,
-      app.status === "rejected" && styles.requestedCardRejected,
-    ]}
-  >
-    <View style={styles.requestedTopRow}>
-      <View style={{ flex: 1 }}>
+            <View
+              key={app?._id || Math.random()}
+              style={[
+                styles.requestedCard,
+                app.status === "rejected" && styles.requestedCardRejected,
+              ]}
+            >
+              <View style={styles.requestedTopRow}>
+                <View style={{ flex: 1 }}>
+                  {/* ✅ REPLACED */}
+                  <Text style={styles.jobTitle}>{app.jobId?.category}</Text>
 
-        {/* ✅ REPLACED */}
-        <Text style={styles.jobTitle}>
-          {app.jobId?.category}
-        </Text>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      {
+                        color:
+                          app.status === "rejected"
+                            ? Colors.error
+                            : Colors.warning,
+                      },
+                    ]}
+                  >
+                    Status:{" "}
+                    {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
+                  </Text>
+                </View>
 
-        <Text
-          style={[
-            styles.statusText,
-            {
-              color:
-                app.status === "rejected"
-                  ? Colors.error
-                  : Colors.warning,
-            },
-          ]}
-        >
-          Status:{" "}
-          {app.status.charAt(0).toUpperCase() + app.status.slice(1)}
-        </Text>
-      </View>
+                <StatusIcon status={app.status} />
+              </View>
 
-      <StatusIcon status={app.status} />
-    </View>
+              {/* ✅ REPLACED */}
+              <Text style={styles.jobMeta}>
+                Applied: {new Date(app.createdAt).toLocaleDateString()}
+              </Text>
 
-    {/* ✅ REPLACED */}
-    <Text style={styles.jobMeta}>
-      Applied: {new Date(app.createdAt).toLocaleDateString()}
-    </Text>
-
-    <Text style={styles.jobMeta}>
-      Expected Pay: ₹{app.expectedPay}
-    </Text>
-  </View>
-))
+              <Text style={styles.jobMeta}>
+                Expected Pay: ₹{app.expectedPay}
+              </Text>
+            </View>
+          ))
         )}
 
         <View style={{ height: 40 }} />

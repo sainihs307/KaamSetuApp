@@ -19,7 +19,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const BASE_URL = "http://172.23.17.67:8030/api"; // ← same IP as login.tsx
+const BASE_URL = "http://172.27.16.252:8030/api"; // ← same IP as login.tsx
 
 const PURPLE = "#2196F3";
 const LIGHT_PURPLE = "#F3E5F5";
@@ -438,19 +438,19 @@ export default function LiveJobsScreen() {
     setReferPhone("");
     setReferSkills("");
   };
-  
+
   const handleReferSubmit = async () => {
     if (!referName.trim())
       return Alert.alert("Error", "Please enter the worker's name");
-  
+
     if (referPhone.length !== 10)
       return Alert.alert("Error", "Phone number must be exactly 10 digits");
-  
+
     if (!referSkills.trim())
       return Alert.alert("Error", "Please describe the worker's skills");
-  
+
     setReferLoading(true);
-  
+
     try {
       const res = await fetch(`${BASE_URL}/referral/add`, {
         method: "POST",
@@ -465,15 +465,15 @@ export default function LiveJobsScreen() {
           jobId: referJobId, // 🔥 VERY IMPORTANT
         }),
       });
-  
+
       const data = await res.json();
-  
+
       if (!res.ok) {
         return Alert.alert("Error", data.message || "Failed to add referral");
       }
-  
+
       Alert.alert("✅ Referral Added!", "Worker added to your referrals.");
-  
+
       closeReferModal();
     } catch (error) {
       console.log("Referral error:", error);
