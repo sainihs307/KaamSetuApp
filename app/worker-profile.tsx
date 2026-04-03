@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Base_Url , API_BASE} from "../constants/Config";
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -18,7 +19,7 @@ import {
   Shadow,
   Spacing,
 } from "../constants/kaamsetuTheme";
-import { workerProfiles } from "../constants/mockData";
+
 
 function Avatar({ name, size = 80 }: { name: string; size?: number }) {
   const initials = name
@@ -50,7 +51,38 @@ export default function WorkerProfileScreen() {
   }>();
 
   const router = useRouter();
-  const worker = workerProfiles[workerId ?? ""];
+  const [worker, setWorker] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchWorker = async () => {
+      try {
+        const token = await AsyncStorage.getItem("token");
+        const res = await fetch(`${Base_Url}/api/auth/user/${workerId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setWorker(data.user || data);
+        }
+      } catch (e) {
+        console.log("Worker fetch error:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (workerId) fetchWorker();
+  }, [workerId]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!worker) {
     return (
@@ -147,39 +179,37 @@ export default function WorkerProfileScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.heroCard}>
-          <Avatar name={worker.name} size={90} />
-          <Text style={styles.heroName}>{worker.name}</Text>
-          <Text style={styles.heroTag}>{worker.workTag}</Text>
+          <Avatar name={worker.name || "Worker"} size={90} />
+<Text style={styles.heroName}>{worker.name || "Worker"}</Text>
+<Text style={styles.heroTag}>{worker.skills?.join(", ") || "Worker"}</Text>
 
-          <View style={styles.heroRatingRow}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <Text
-                key={i}
-                style={{
-                  color:
-                    i <= Math.round(worker.rating) ? Colors.starGold : "#DDD",
-                  fontSize: 18,
-                }}
-              >
-                ★
-              </Text>
-            ))}
-            <Text style={styles.heroRatingText}>
-              {" "}
-              {worker.rating} ({worker.ratingCount}+ Ratings)
-            </Text>
-          </View>
+<View style={styles.heroRatingRow}>
+  {[1, 2, 3, 4, 5].map((i) => (
+    <Text
+      key={i}
+      style={{
+        color:
+          i <= Math.round(worker.averageRating || 0) ? Colors.starGold : "#DDD",
+        fontSize: 18,
+      }}
+    >
+      ★
+    </Text>
+  ))}
+  <Text style={styles.heroRatingText}>
+    {" "}
+    {worker.averageRating?.toFixed(1) || "0"} ({worker.totalRatings || 0} Ratings)
+  </Text>
+</View>
 
-          <View style={styles.heroPills}>
-            <View style={styles.heroPill}>
-              <Text style={styles.heroPillText}>📍 {worker.location}</Text>
-            </View>
-            <View style={styles.heroPill}>
-              <Text style={styles.heroPillText}>
-                🏆 {worker.experience}+ yrs
-              </Text>
-            </View>
-          </View>
+<View style={styles.heroPills}>
+  <View style={styles.heroPill}>
+    <Text style={styles.heroPillText}>📍 {worker.address || "N/A"}</Text>
+  </View>
+  <View style={styles.heroPill}>
+    <Text style={styles.heroPillText}>📞 {worker.phone || "N/A"}</Text>
+  </View>
+</View>
 
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.chatBtn} onPress={handleChat}>
@@ -195,25 +225,15 @@ export default function WorkerProfileScreen() {
         </View>
 
         <View style={styles.sectionHeader}>
-          <View style={styles.sectionAccent} />
-          <Text style={styles.sectionTitle}>Previous Work History</Text>
-        </View>
+  <View style={styles.sectionAccent} />
+  <Text style={styles.sectionTitle}>Worker Info</Text>
+</View>
 
-        {worker.previousWork.map((work, idx) => (
-          <View key={idx} style={styles.workCard}>
-            <View style={styles.workTopRow}>
-              <Text style={styles.workTitle}>{work.title}</Text>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-              >
-                <Text style={{ color: Colors.starGold, fontSize: 13 }}>★</Text>
-                <Text style={styles.workRatingText}>{work.rating}</Text>
-              </View>
-            </View>
-            <Text style={styles.workTime}>{work.timeAgo}</Text>
-            <Text style={styles.workReview}>"{work.review}"</Text>
-          </View>
-        ))}
+<View style={styles.workCard}>
+  <Text style={styles.workTitle}>Email: {worker.email || "N/A"}</Text>
+  <Text style={styles.workTime}>Phone: {worker.phone || "N/A"}</Text>
+  <Text style={styles.workTime}>Address: {worker.address || "N/A"}</Text>
+</View>
 
         <View style={{ height: 32 }} />
       </ScrollView>

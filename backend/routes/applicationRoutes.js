@@ -95,11 +95,15 @@ router.get("/job/:jobId", auth, async (req, res) => {
 router.get("/my-applications", auth, async (req, res) => {
   try {
     const applications = await Application.find({ workerId: req.user.id })
-      .populate(
-        "jobId",
-        "category description address minBudget maxBudget status posterId",
-      )
-      .sort({ createdAt: -1 });
+  .populate({
+    path: "jobId",
+    select: "category description address minBudget maxBudget status posterId userId",
+    populate: {
+      path: "posterId",
+      select: "_id name",
+    },
+  })
+  .sort({ createdAt: -1 });
 
     res.json({ applications });
   } catch (err) {

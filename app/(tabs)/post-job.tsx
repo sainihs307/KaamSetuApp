@@ -141,15 +141,23 @@ export default function PostJob() {
         maxBudget: noBudget ? 0 : Number(maxBudget),
         address,
       };
+        const token = await AsyncStorage.getItem("token");
 
-      // 3. Send to Server
-      const response = await fetch(`${API_BASE}/jobs/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+console.log("TOKEN:", token);
+console.log("URL:", `${API_BASE}/jobs`);
 
-      const result = await response.json();
+const response = await fetch(`${API_BASE}/jobs`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify(payload),
+});
+
+const result = await response.json();   // ✅ ONLY THIS
+
+console.log("RESPONSE:", result);
 
       if (response.ok) {
         setPopup("Job posted successfully 🎉");

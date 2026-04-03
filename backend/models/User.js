@@ -20,6 +20,16 @@ const userSchema = new mongoose.Schema({
         givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         createdAt: { type: Date, default: Date.now },
     }],
+
+    // After the existing ratings array, add:
+employerRatings: [{
+    rating: { type: Number, min: 1, max: 5 },
+    review: { type: String },
+    givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    createdAt: { type: Date, default: Date.now },
+}],
+averageEmployerRating: { type: Number, default: 0 },
+totalEmployerRatings: { type: Number, default: 0 },
     averageRating: { type: Number, default: 0 },
     totalRatings: { type: Number, default: 0 },
 }, { timestamps: true });

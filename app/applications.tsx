@@ -21,7 +21,7 @@ import {
   Spacing,
 } from "../constants/kaamsetuTheme";
 
-const API_URL = "http://172.27.16.252:8030";
+const API_URL = "http://172.24.209.112:8030";
 
 function StarRatingInput({
   rating,
@@ -81,6 +81,15 @@ type ListRow =
   | { type: "section"; id: string; title: string }
   | { type: "application"; id: string; data: ApplicationItem }
   | { type: "referral"; id: string; data: ReferralItem };
+
+  const safeJson = async (res: Response) => {
+  try {
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
 
 export default function ApplicationListScreen() {
   const { jobId } = useLocalSearchParams<{ jobId: string }>();
@@ -181,8 +190,8 @@ export default function ApplicationListScreen() {
         }),
       ]);
 
-      const applicationsData = await applicationsRes.json();
-      const referralsData = await referralsRes.json();
+     const applicationsData = await safeJson(applicationsRes);
+const referralsData = await safeJson(referralsRes);
 
       if (!applicationsRes.ok) {
         console.log("Applications fetch error:", applicationsData);

@@ -1,5 +1,4 @@
-# Query: 
-# ContextLines: 1
+
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,7 +19,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
-const BASE_URL = "http://172.27.16.252:8030/api"; // Your server IP
+const BASE_URL = "http://172.24.209.112:8030/api"; // Your server IP
 const PRIMARY = "#2196F3";
 const BG_COLOR = "#f5f3ff";
 const CARD_BG = "#ffffff";

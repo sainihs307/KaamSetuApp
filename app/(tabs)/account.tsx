@@ -10,7 +10,9 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
+  Modal,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -143,10 +145,11 @@ type UserType = {
   rating?: number;
   averageRating?: number;
   totalRatings?: number;
+  averageEmployerRating?: number;
+  totalEmployerRatings?: number;
   profileImage?: string;
   role?: string;
 };
-
 type JobType = {
   _id: string;
   category: string;
@@ -170,6 +173,7 @@ type ApplicationType = {
     category: string;
     description?: string;
     address?: string;
+    posterId?: string | { _id: string; name?: string };
   };
 };
 
@@ -184,6 +188,15 @@ type ReferralType = {
     category?: string;
     description?: string;
   };
+};
+
+const safeJson = async (res: Response) => {
+  try {
+    const text = await res.text();
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 };
 
 // ─── Main Screen ────────────────────────────────────────────────────────────
@@ -205,6 +218,12 @@ export default function AccountScreen() {
     ApplicationType[]
   >([]);
   const [myReferrals, setMyReferrals] = useState<ReferralType[]>([]);
+const [ratingModal, setRatingModal] = useState<{ visible: boolean; jobId: string; workerId: string }>({ visible: false, jobId: "", workerId: "" });
+const [employerRatingModal, setEmployerRatingModal] = useState<{ visible: boolean; employerId: string }>({ visible: false, employerId: "" });
+const [rating, setRating] = useState(0);
+const [review, setReview] = useState("");
+const [employerRating, setEmployerRating] = useState(0);
+const [employerReview, setEmployerReview] = useState("");
 
   // ─── Load Data ──────────────────────────────────────────────────────────
 
@@ -245,11 +264,11 @@ export default function AccountScreen() {
           ]);
 
           const [appsData, referralsData, requestsData, pastRequestsData] = await Promise.all([
-            appsRes.json(),
-            referralsRes.json(),
-            requestsRes.json(),
-            pastRequestsRes.json(),
-          ]);
+  safeJson(appsRes),
+  safeJson(referralsRes),
+  safeJson(requestsRes),
+  safeJson(pastRequestsRes),
+]);
 
           const allApps = appsRes.ok ? (appsData.applications ?? []) : [];
           setMyApplications(allApps.filter((a: ApplicationType) => 
@@ -283,12 +302,11 @@ export default function AccountScreen() {
           fetch(`${API_URL}/api/referrals`, { headers }),
         ]);
 
-        const [requestsData, pastRequestsData, referralsData] =
-          await Promise.all([
-            requestsRes.json(),
-            pastRequestsRes.json(),
-            referralsRes.json(),
-          ]);
+        const [requestsData, pastRequestsData, referralsData] = await Promise.all([
+  safeJson(requestsRes),
+  safeJson(pastRequestsRes),
+  safeJson(referralsRes),
+]);
 
         setMyRequests(
           requestsRes.ok && Array.isArray(requestsData) ? requestsData : [],
@@ -393,42 +411,96 @@ export default function AccountScreen() {
   };
 
   const handleCompleteJob = (jobId: string) => {
-    Alert.alert(
-      "Mark as Completed",
-      "Confirm that the work has been done and mark this job as completed?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Complete",
-          onPress: async () => {
-            try {
-              const token = await AsyncStorage.getItem("token");
-              const response = await fetch(
-                `${API_URL}/api/jobs/${jobId}/complete`,
-                {
-                  method: "PATCH",
-                  headers: { Authorization: `Bearer ${token}` },
-                },
-              );
-              const data = await response.json();
+  Alert.alert(
+    "Mark as Completed",
+    "Confirm that the work has been done and mark this job as completed?",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Complete",
+        onPress: async () => {
+          try {
+            const token = await AsyncStorage.getItem("token");
+            const response = await fetch(
+              `${API_URL}/api/jobs/${jobId}/complete`,
+              {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}` },
+              },
+            );
+            const data = await response.json();
+if (response.ok) {
+  setMyRequests((prev) => prev.filter((j) => j._id !== jobId));
+  setMyPastRequests((prev) => [data.job, ...prev]);
 
-              if (response.ok) {
-                setMyRequests((prev) => prev.filter((j) => j._id !== jobId));
-                setMyPastRequests((prev) => [data.job, ...prev]);
-                Alert.alert("Success", "Job marked as completed!");
-              } else {
-                Alert.alert(
-                  "Error",
-                  data.error || "Failed to complete the job.",
-                );
-              }
-            } catch {
-              Alert.alert("Error", "A network error occurred.");
+  if (data.workerId) {
+    setRatingModal({ visible: true, jobId, workerId: data.workerId.toString() });
+  } else {
+    Alert.alert("Success", "Job marked as completed!");
+  }
+} else {
+              Alert.alert("Error", data.error || "Failed to complete the job.");
             }
-          },
+          } catch {
+            Alert.alert("Error", "A network error occurred.");
+          }
         },
-      ],
-    );
+      },
+    ],
+  );
+};
+
+const handleRatingSubmit = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const res = await fetch(`${API_URL}/api/auth/rate-worker`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ workerId: ratingModal.workerId, rating, review }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      Alert.alert("Thank you!", "Rating submitted.");
+    } else {
+      Alert.alert("Error", data.message || "Failed to submit rating.");
+    }
+  } catch {
+    Alert.alert("Error", "Network error.");
+  } finally {
+    setRatingModal({ visible: false, jobId: "", workerId: "" });
+    setRating(0);
+    setReview("");
+    await loadAccountData();
+  }
+};
+
+const handleEmployerRatingSubmit = async () => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/auth/rate-employer`, {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ employerId: employerRatingModal.employerId, rating: employerRating, review: employerReview }),
+});
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert("Thank you!", "Rating submitted.");
+      } else {
+        Alert.alert("Error", data.message || "Failed to submit rating.");
+      }
+    } catch {
+      Alert.alert("Error", "Network error.");
+    } finally {
+      setEmployerRatingModal({ visible: false, employerId: "" });
+      setEmployerRating(0);
+      setEmployerReview("");
+    }
   };
 
   const handleWithdrawApplication = (applicationId: string) => {
@@ -790,12 +862,42 @@ export default function AccountScreen() {
                     >
                       <Text style={styles.chatBtnText}>Chat</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       style={styles.dangerOutlineBtnCompact}
                       onPress={() => handleWithdrawApplication(app._id)}
                     >
                       <Text style={styles.dangerOutlineBtnText}>Withdraw</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : app.status === "accepted" ? (
+                  <TouchableOpacity
+                    style={styles.chatBtnSingle}
+                    onPress={() => handleOpenChat(app)}
+                  >
+                    <Text style={styles.chatBtnText}>Chat</Text>
+                  </TouchableOpacity>
+                ) : app.status === "completed" ? (
+                  <View style={styles.workerActionRow}>
+                    <TouchableOpacity
+                      style={styles.chatBtn}
+                      onPress={() => handleOpenChat(app)}
+                    >
+                      <Text style={styles.chatBtnText}>Chat</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.dangerOutlineBtnCompact, { borderColor: Colors.primary }]}
+                      onPress={() => {
+                        const employerId = typeof app.jobId?.posterId === "object"
+  ? (app.jobId?.posterId as any)?._id
+  : app.jobId?.posterId as string | undefined;
+                        if (employerId) {
+                          setEmployerRatingModal({ visible: true, employerId });
+                        } else {
+                          Alert.alert("Error", "Employer info not available.");
+                        }
+                      }}
+                    >
+                      <Text style={[styles.dangerOutlineBtnText, { color: Colors.primary }]}>Rate</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -833,6 +935,23 @@ export default function AccountScreen() {
                 <Text style={styles.requestSub}>
                   📅 Applied: {new Date(app.createdAt).toLocaleDateString()}
                 </Text>
+                {app.status === "completed" && (
+  <TouchableOpacity
+    style={[styles.outlineBtn, { borderColor: Colors.primary }]}
+    onPress={() => {
+      const employerId = typeof app.jobId?.posterId === "object"
+        ? (app.jobId?.posterId as any)?._id
+        : app.jobId?.posterId as string | undefined;
+      if (employerId) {
+        setEmployerRatingModal({ visible: true, employerId });
+      } else {
+        Alert.alert("Error", "Employer info not available.");
+      }
+    }}
+  >
+    <Text style={[styles.outlineBtnText, { color: Colors.primary }]}>⭐ Rate Employer</Text>
+  </TouchableOpacity>
+)}
                 {app.completedAt && (
                   <Text style={styles.requestSub}>
                     🗓 Completed:{" "}
@@ -904,8 +1023,11 @@ export default function AccountScreen() {
                 </TouchableOpacity>
               </View>
 
-              <StarRating rating={user?.averageRating || 0} />
-
+<StarRating rating={
+  user?.role === "worker"
+    ? (user?.averageRating || 0)
+    : (user?.averageEmployerRating || 0)
+} />
               {user?.role && (
                 <View
                   style={[
@@ -976,6 +1098,89 @@ export default function AccountScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <Modal transparent animationType="fade" visible={ratingModal.visible}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "100%", gap: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: Colors.textPrimary }}>Rate the Worker</Text>
+            <Text style={{ fontSize: 14, color: Colors.textSecondary }}>How was their work?</Text>
+
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <TouchableOpacity key={i} onPress={() => setRating(i)}>
+                  <Text style={{ fontSize: 28, color: i <= rating ? Colors.starGold : "#DDD" }}>★</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={{ borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 10, fontSize: 14, minHeight: 80, textAlignVertical: "top" }}
+              placeholder="Write a review (optional)..."
+              placeholderTextColor="#aaa"
+              value={review}
+              onChangeText={setReview}
+              multiline
+            />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 999, backgroundColor: "#F1F3F5", alignItems: "center" }}
+                onPress={() => { setRatingModal({ visible: false, jobId: "", workerId: "" }); setRating(0); setReview(""); }}
+              >
+                <Text style={{ fontWeight: "600", color: Colors.textSecondary }}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 999, backgroundColor: Colors.primary, alignItems: "center" }}
+                onPress={handleRatingSubmit}
+              >
+                <Text style={{ fontWeight: "700", color: "#fff" }}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal transparent animationType="fade" visible={employerRatingModal.visible}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 20 }}>
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "100%", gap: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: "800", color: Colors.textPrimary }}>Rate the Employer</Text>
+            <Text style={{ fontSize: 14, color: Colors.textSecondary }}>How was your experience?</Text>
+
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <TouchableOpacity key={i} onPress={() => setEmployerRating(i)}>
+                  <Text style={{ fontSize: 28, color: i <= employerRating ? Colors.starGold : "#DDD" }}>★</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={{ borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 10, fontSize: 14, minHeight: 80, textAlignVertical: "top" }}
+              placeholder="Write a review (optional)..."
+              placeholderTextColor="#aaa"
+              value={employerReview}
+              onChangeText={setEmployerReview}
+              multiline
+            />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 999, backgroundColor: "#F1F3F5", alignItems: "center" }}
+                onPress={() => { setEmployerRatingModal({ visible: false, employerId: "" }); setEmployerRating(0); setEmployerReview(""); }}
+              >
+                <Text style={{ fontWeight: "600", color: Colors.textSecondary }}>Skip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 12, borderRadius: 999, backgroundColor: Colors.primary, alignItems: "center" }}
+                onPress={handleEmployerRatingSubmit}
+              >
+                <Text style={{ fontWeight: "700", color: "#fff" }}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }

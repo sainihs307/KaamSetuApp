@@ -105,11 +105,11 @@ export default function ApplicationListScreen() {
         console.log("Applications fetch error:", applicationsData);
         setApplications([]);
       } else {
-        setApplications(
-          Array.isArray(applicationsData)
-            ? applicationsData
-            : applicationsData.applications || [],
-        );
+        const apps = Array.isArray(applicationsData)
+  ? applicationsData
+  : applicationsData.applications || [];
+console.log("Applications for job:", jobId, JSON.stringify(apps.map((a: ApplicationItem) => ({ id: a._id, status: a.status, name: a.workerName }))));
+setApplications(apps);
       }
 
       if (!referralsRes.ok) {
@@ -299,9 +299,10 @@ export default function ApplicationListScreen() {
             disabled={!canOpenProfile}
             onPress={() => {
               if (!workerIdValue) return;
-              router.push(
-                `/worker-profile?workerId=${workerIdValue}&jobId=${jobId}&applicationId=${app._id}`,
-              );
+              console.log("Opening profile with workerId:", workerIdValue, "type:", typeof workerIdValue);
+router.push(
+  `/worker-profile?workerId=${workerIdValue}&jobId=${jobId}&applicationId=${app._id}`,
+);
             }}
           >
             <Text style={styles.cardTitle}>

@@ -100,6 +100,7 @@ type Job = {
   budgetMax: number;
   isNegotiable: boolean;
   schedule: string;
+  endSchedule?: string | null;
   address: string;
   rating: number;
   description: string;
@@ -216,9 +217,20 @@ export default function LiveJobsScreen() {
         },
       });
 
-      const data = await res.json();
+      const text = await res.text();
+console.log("RAW RESPONSE:", text);
 
-      console.log("API RESPONSE:", data);
+let data;
+try {
+  data = JSON.parse(text);
+} catch (e) {
+  // Try to extract valid jobs before the broken part
+  console.log("Parse failed, trying to find broken job...");
+  setJobs([]);
+  setLoading(false);
+  setRefreshing(false);
+  return;
+}
 
       if (res.ok) {
         if (Array.isArray(data)) {
@@ -227,14 +239,22 @@ export default function LiveJobsScreen() {
             budgetMin: job.minBudget,
             budgetMax: job.maxBudget,
             isNegotiable: job.noBudget,
-            schedule: new Date(job.startDate).toLocaleString("en-IN", {
-              day: "numeric",
-              month: "short",
-              hour: "numeric",
-              minute: "2-digit",
-            }),
-            postedBy: { name: "User" },
-            rating: 4,
+           schedule: new Date(job.startDate).toLocaleString("en-IN", {
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+}),
+endSchedule: job.endDate
+  ? new Date(job.endDate).toLocaleString("en-IN", {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+  : null,
+postedBy: job.postedBy || { name: "User" },
+rating: job.rating ?? 4,
           }));
 
           setJobs(formatted);
@@ -611,12 +631,19 @@ const handleReferSubmit = async () => {
           )}
 
           <Text style={styles.infoText}>
-            <Text style={styles.infoLabel}>Budget: </Text>
-            {budgetText}
-            {"     "}
-            <Text style={styles.infoLabel}>Time Schedule: </Text>
-            {job.schedule}
-          </Text>
+  <Text style={styles.infoLabel}>Budget: </Text>
+  {budgetText}
+  {"     "}
+  <Text style={styles.infoLabel}>Start: </Text>
+  {job.schedule}
+  {job.endSchedule ? (
+    <>
+      {"   "}
+      <Text style={styles.infoLabel}>End: </Text>
+      {job.endSchedule}
+    </>
+  ) : null}
+</Text>
 
           <Text style={styles.infoText}>
             <Text style={styles.infoLabel}>Address: </Text>

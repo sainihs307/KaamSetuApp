@@ -45,7 +45,7 @@ router.post("/send-otp", async (req, res) => {
     console.log("OTP:", otp); // debug
 
     // 🚀 SEND TO YOUR PC (relay server)
-    const relayRes = await fetch("http://172.23.37.47:3000/send-otp", {
+    const relayRes = await fetch("http://172.24.209.112:3000/send-otp", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -178,6 +178,70 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+router.get("/user/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.post("/rate-worker", async (req, res) => {
+  try {
+    const { workerId, rating, review } = req.body;
+    const worker = await User.findById(workerId);
+    if (!worker) return res.status(404).json({ message: "Worker not found" });
+
+    const newTotal = (worker.totalRatings || 0) + 1;
+    const newAvg = ((worker.averageRating || 0) * (worker.totalRatings || 0) + rating) / newTotal;
+
+    worker.totalRatings = newTotal;
+    worker.averageRating = parseFloat(newAvg.toFixed(2));
+    await worker.save();
+
+    res.json({ message: "Rating submitted", averageRating: worker.averageRating });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.post("/rate-employer", async (req, res) => {
+  try {
+    const { employerId, rating, review } = req.body;
+
+    if (!employerId || !rating) {
+      return res.status(400).json({ message: "employerId and rating are required" });
+    }
+
+    const employer = await User.findById(employerId);
+    if (!employer) return res.status(404).json({ message: "Employer not found" });
+
+    const newTotal = (employer.totalEmployerRatings || 0) + 1;
+    const newAvg =
+      ((employer.averageEmployerRating || 0) * (employer.totalEmployerRatings || 0) + rating) /
+      newTotal;
+
+    employer.totalEmployerRatings = newTotal;
+    employer.averageEmployerRating = parseFloat(newAvg.toFixed(2));
+    employer.employerRatings.push({
+      rating,
+      review: review || "",
+      givenBy: null, // no auth middleware here; optionally pass workerId from frontend
+    });
+
+    await employer.save();
+
+    res.json({
+      message: "Employer rated successfully",
+      averageEmployerRating: employer.averageEmployerRating,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 // ================= UPDATE PROFILE =================
 router.put(
   "/update-profile",
@@ -240,5 +304,22 @@ router.put(
     }
   },
 );
+
+router.get("/me", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ message: "No token" });
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json({ user });
+  } catch (err) {
+    res.status(401).json({ message: "Invalid token" });
+  }
+});
 // export default router;
 export default router;

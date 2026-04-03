@@ -1,47 +1,84 @@
 import express from "express";
 import auth from "../middleware/auth.js";
 import Job from "../models/Job.js";
-
+import Application from "../models/Application.js";
+import User from "../models/User.js";
 const router = express.Router();
+
+// ─── GET ALL JOBS ─────────────────────────────────────────────────────────────
+// AFTER:
+// AFTER:
+
+
+
+// ✅ 🔥 ADD THIS HERE (POST ROUTE)
+router.post("/", auth, async (req, res) => {
+  try {
+    console.log("🔥 BODY:", req.body);
+    console.log("🔥 USER:", req.user);
+
+    const newJob = new Job({
+      ...req.body,
+      posterId: req.user._id,   // ✅ FIXED
+      status: "pending",
+    });
+
+    const savedJob = await newJob.save();
+
+    res.status(201).json(savedJob);
+  } catch (err) {
+    console.error("🔥 FULL ERROR:", err);   // ✅ VERY IMPORTANT
+    res.status(500).json({ error: err.message }); // send real error
+  }
+});
+
 
 // ─── GET ALL JOBS ─────────────────────────────────────────────────────────────
 router.get("/", async (req, res) => {
   try {
     const jobs = await Job.find({
-      status: { $nin: ["completed", "cancelled"] }, // ← exclude these
+      status: { $nin: ["completed", "cancelled"] },
     });
-    res.json(jobs);
+
+    const formatted = await Promise.all(
+      jobs.map(async (job) => {
+        let posterName = "User";
+        try {
+          if (job.posterId && job.posterId.length === 24) {
+            const user = await User.findById(job.posterId).select("name");
+            if (user?.name) posterName = user.name;
+          }
+        } catch (_) {}
+        return {
+          ...job.toObject(),
+          postedBy: { name: posterName },
+        };
+      })
+    );
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
-  }
-});
-// ─── CREATE A JOB ─────────────────────────────────────────────────────────────
-router.post("/create", async (req, res) => {
-  try {
-    const newJob = new Job(req.body);
-    const savedJob = await newJob.save();
-    res.status(201).json(savedJob);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ─── MY CURRENT REQUESTS (pending + in_progress) ─────────────────────────────
-// GET /api/jobs/my-requests/:userId
-router.get("/my-requests/:userId", async (req, res) => {
-  try {
-    const jobs = await Job.find({
-      posterId: req.params.userId,
-      status: { $in: ["pending", "in_progress", "in-progress"] },
-    }).sort({ createdAt: -1 });
-    res.json(jobs);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
 });
 
 // ─── MY PAST REQUESTS (completed + cancelled) ─────────────────────────────────
 // GET /api/jobs/my-past-requests/:userId
+
+router.get("/my-requests/:userId", async (req, res) => {
+  try {
+    const jobs = await Job.find({
+      posterId: req.params.userId,   // ✅ IMPORTANT
+      status: { $nin: ["completed", "cancelled"] },
+    }).sort({ createdAt: -1 });
+
+    res.json(jobs);
+  } catch (err) {
+    console.error("🔥 MY REQUESTS ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 router.get("/my-past-requests/:userId", async (req, res) => {
   try {
     const jobs = await Job.find({
@@ -96,10 +133,20 @@ router.patch("/:id/complete", auth, async (req, res) => {
     }
 
     job.status = "completed";
-    job.completedAt = new Date();
-    await job.save();
+job.completedAt = new Date();
+await job.save();
 
-    res.status(200).json({ message: "Job marked as completed", job });
+// Mark the accepted application as completed so worker sees Rate button
+// Mark the accepted application as completed so worker sees Rate button
+const acceptedApp = await Application.findOneAndUpdate(
+  { jobId: job._id, status: "accepted" },
+  { status: "completed", completedAt: new Date() },
+  { new: true }
+).populate("workerId", "_id name");
+
+const workerId = acceptedApp?.workerId?._id || acceptedApp?.workerId || null;
+
+res.status(200).json({ message: "Job marked as completed", job, workerId });
   } catch (err) {
     console.error("🔥 [COMPLETE ERROR]", err);
     res.status(500).json({ error: "Internal Server Error" });
